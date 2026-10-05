@@ -54,6 +54,13 @@ DEFAULTS: dict[str, Any] = {
         "chrome_path": "",              # empty => auto-detect
         "headless": False,
     },
+    # Research (Reddit + X search) runs in its own browser, signed into a
+    # throwaway account, so scraping never touches the posting account.
+    # Merged over "browser" when TWEETY_BROWSER=research (research.py sets it).
+    "research_browser": {
+        "port": 9223,
+        "profile_dir": "~/.tweetytweets/chrome-research",
+    },
 }
 
 
@@ -69,6 +76,13 @@ def _merged(base: dict, override: dict) -> dict:
 
 def load(required: bool = False) -> dict:
     """Merged config. With required=True, exits with guidance if missing."""
+    cfg = _load(required)
+    if os.environ.get("TWEETY_BROWSER") == "research":
+        cfg["browser"] = _merged(cfg["browser"], cfg.get("research_browser") or {})
+    return cfg
+
+
+def _load(required: bool) -> dict:
     if not CONFIG_PATH.exists():
         if required:
             print(json.dumps({

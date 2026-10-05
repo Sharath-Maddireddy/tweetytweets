@@ -104,7 +104,7 @@ async def measure_limit(ladder: tuple[int, ...] = (280, 1000, 5000, 25000, 30000
             st = json.loads(await page.eval(COMPOSE_STATE_JS))
             return not st.get("btn_disabled")
         finally:
-            await page.__aexit__(None, None, None)
+            await _close(page)
 
     lo, hi = 0, None
     probes: list[dict] = []
@@ -184,6 +184,12 @@ async def _open(url: str) -> Session:
     return page
 
 
+async def _close(page: Session) -> None:
+    """Disconnect AND close the tab; disconnecting alone leaks one tab per call."""
+    await page.__aexit__(None, None, None)
+    browser.close_tab(page.ws_url.rsplit("/", 1)[-1])
+
+
 async def session_info() -> dict:
     browser.ensure_chrome()
     page = await _open("https://x.com/home")
@@ -191,7 +197,7 @@ async def session_info() -> dict:
         await browser.settle_page(page, 4)
         return await wait_login(page)
     finally:
-        await page.__aexit__(None, None, None)
+        await _close(page)
 
 
 def require_session(expect: str | None = None) -> dict:
@@ -327,7 +333,7 @@ async def _read_profile(h: str | None = None, limit: int = 4,
             await asyncio.sleep(2)
         return []
     finally:
-        await page.__aexit__(None, None, None)
+        await _close(page)
 
 
 def _norm(s: str) -> str:
@@ -374,7 +380,7 @@ async def capture(what: str = "profile", h: str | None = None) -> dict:
         path.write_bytes(base64.b64decode(res["data"]))
         title = await page.eval("document.title")
     finally:
-        await page.__aexit__(None, None, None)
+        await _close(page)
     return {"screenshot": str(path.resolve()), "what": what, "url": url,
             "title": title, "framing": note}
 
@@ -438,7 +444,7 @@ async def do_post(text: str, image: Path | None = None, kind: str = "value",
             if cs.get("error"):
                 return {"error": cs["error"], "click": click, "screenshot": str(shot)}
     finally:
-        await page.__aexit__(None, None, None)
+        await _close(page)
 
     # Honest verification: read the profile back, polling (a single read can be stale).
     head = _norm(body)[:60]

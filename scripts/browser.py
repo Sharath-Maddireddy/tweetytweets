@@ -12,6 +12,7 @@ profile, so the session is isolated and unambiguous.
 CLI:
   python browser.py info      # is Chrome up, which tabs are open
   python browser.py launch    # start the automation browser
+  TWEETY_BROWSER=research python browser.py launch   # the research (dummy account) browser
 """
 from __future__ import annotations
 
@@ -259,16 +260,16 @@ def scrape_many(urls: list[str], expr: str, settle: float = 6.0,
             close_tabs_matching(close_after)
 
 
+def close_tab(tab_id: str) -> bool:
+    try:
+        with urllib.request.urlopen(f"{_base()}/json/close/{tab_id}", timeout=5):
+            return True
+    except Exception:
+        return False
+
+
 def close_tabs_matching(substr: str) -> int:
-    n = 0
-    for tab in list_tabs():
-        if substr in (tab.get("url") or ""):
-            try:
-                with urllib.request.urlopen(f"{_base()}/json/close/{tab['id']}", timeout=5):
-                    n += 1
-            except Exception:
-                pass
-    return n
+    return sum(close_tab(t["id"]) for t in list_tabs() if substr in (t.get("url") or ""))
 
 
 def screenshot(url: str, out: str, settle: float = 5.0,

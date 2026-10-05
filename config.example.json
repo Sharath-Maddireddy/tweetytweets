@@ -40,5 +40,11 @@
     "profile_dir": "",
     "chrome_path": "",
     "headless": false
+  },
+
+  "_research_browser": "Reddit + X search scrape in a SEPARATE browser signed into a throwaway account, so research never touches the posting account. Sign in once with: TWEETY_BROWSER=research python scripts/browser.py launch",
+  "research_browser": {
+    "port": 9223,
+    "profile_dir": "~/.tweetytweets/chrome-research"
   }
 }

@@ -10,7 +10,7 @@ shots/
 scratch/
 
 # your voice profile: measured from your own posts, deliberately not committed
-references/voice-profile.local.md
+references/*.local.md
 
 # browser profile (cookies live here - never commit)
 .chrome-profile/
@@ -27,3 +27,4 @@ venv/
 .DS_Store
 Thumbs.db
 desktop.ini
+logs/

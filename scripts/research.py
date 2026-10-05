@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import urllib.parse
@@ -257,7 +258,23 @@ X_JS = r"""
 def x_search(queries: list[str] | None = None, mode: str = "top") -> list[dict]:
     """Scrape X search results from the DOM. Requires a logged-in session."""
     queries = queries or (settings.load().get("x_queries") or [])
-    urls = ["https://x.com/search?q=" + urllib.parse.quote(q) + f"&src=typed_query&f={mode}"
+    if not queries:
+        return []
+    import post
+    try:
+        info = json.loads(browser.evaluate("https://x.com/home", post.LOGIN_JS, settle=4) or "{}")
+    finally:
+        browser.close_tabs_matching("x.com/home")
+    who = (info.get("handle") or "").lower()
+    if not who:
+        print("  ! x: research browser not signed in - skipping X search", file=sys.stderr)
+        return []
+    if who == post.handle().lower():
+        print(f"  ! x: research browser is signed in as @{who}, the POSTING account - "
+              "refusing to scrape with it. Sign in with the dummy account instead.",
+              file=sys.stderr)
+        return []
+    urls =["https://x.com/search?q=" + urllib.parse.quote(q) + f"&src=typed_query&f={mode}"
             for q in queries]
     raw_list = browser.scrape_many(urls, X_JS, settle=7, close_after="x.com/search")
     out: list[dict] = []
@@ -362,6 +379,7 @@ def collect(hours: int = DEFAULT_WINDOW, skip: tuple[str, ...] = ()) -> dict:
 
 
 def main() -> None:
+    os.environ["TWEETY_BROWSER"] = "research"      # scrape in the dummy account's browser
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", nargs="?", default="collect",

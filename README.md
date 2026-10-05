@@ -96,6 +96,15 @@ python scripts/browser.py launch
 #  silently create a second account instead of logging into yours.
 ```
 
+Research (Reddit + X search) runs in a **second** browser, signed into a
+throwaway X account, so scraping never touches the account you post from:
+
+```bash
+TWEETY_BROWSER=research python scripts/browser.py launch
+#  sign in to x.com there with the DUMMY account, not your real one.
+#  research.py refuses to scrape X if this window is signed in as `handle`.
+```
+
 Verify, and measure your real character ceiling:
 
 ```bash
