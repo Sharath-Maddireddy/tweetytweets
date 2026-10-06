@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -37,6 +38,12 @@ SENT = ROOT / "drafts" / "replies_sent.json"
 
 RESTRICTED_JS = r"/can reply\./i.test(document.body.innerText)"
 MAX_REPLY = 140                                 # chars; longer drafts are dropped
+# Tells that make a reply read as model-written; any draft containing one is dropped.
+AI_TELLS = re.compile(
+    r"[—–;#]|\bit'?s not\b.*\bit'?s\b|\bthe real \w+ is\b|^honestly\b|great point|so true"
+    r"|game.?changer|underrated|hot take|let that sink in|here'?s the thing|spot on"
+    r"|couldn'?t agree more|\b100%|\bdelve\b|\btestament to\b|\bat the end of the day\b",
+    re.I)
 
 PROMPT = """You draft X replies for @{handle}. He posts them himself after editing.
 
@@ -55,6 +62,15 @@ How replies must read - like a seasoned X operator with 200k followers replying 
 - casual is fine (contractions, lowercase), but it should read like someone people quote.
 - no em dashes, no "it's not X, it's Y", no tidy lists of three, no hashtags,
   no emoji except maybe one "lol"/"tbh"-level casual marker, no questions-as-bait.
+- it must read as written by a person, not a model. the giveaways to avoid:
+  balanced two-clause sentences, colon or semicolon setups, "the real X is Y",
+  restating the post back, summing up, stock phrases ("great point", "this is so
+  true", "game changer", "underrated", "hot take", "let that sink in", "here's the
+  thing", "spot on", "couldn't agree more", "100%"), and starting with "honestly".
+- write like a person thinking out loud: fragments are fine, uneven rhythm is fine,
+  react to the one specific detail in the post rather than its general topic.
+- the 2 options must differ in shape (e.g. one blunt fragment, one full sentence),
+  not just in wording. never open both the same way.
 - only claim personal experience that is stated in the context. otherwise give an opinion.
 - never invent numbers, quotes or facts. numbers only if they are in the post itself.
 
@@ -127,9 +143,9 @@ def draft(posts: list[dict], c: dict) -> list[dict]:
     except ValueError as err:
         raise SystemExit(f"model returned no JSON array: {err}\n{txt[:400]}")
     by_url = {r.get("url"): r.get("replies") for r in rows}
-    for u, rs in by_url.items():                  # the model drifts long; enforce it
+    for u, rs in by_url.items():                  # the model drifts; enforce it
         if isinstance(rs, list):
-            by_url[u] = [r for r in rs if len(r) <= MAX_REPLY]
+            by_url[u] = [r for r in rs if len(r) <= MAX_REPLY and not AI_TELLS.search(r)]
     return [{**p, "drafts": by_url[p["url"]]} for p in posts
             if isinstance(by_url.get(p["url"]), list) and by_url[p["url"]]]
 
