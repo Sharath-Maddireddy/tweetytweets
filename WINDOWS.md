@@ -23,22 +23,24 @@ python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 ```
 
-## 3. Files that are NOT in git
+## 3. Config and secrets
 
-Copy from the Mac by USB or a private drive folder (never email or commit them):
+The non-secret config is in git as `config.desktop.json` (Windows Brave path
+already set). Secrets are recreated here, never copied or committed:
 
-| Mac | Windows |
-|---|---|
-| `~/Developer/tweetytweets/config.json` | `tweetytweets\config.json` |
-| `~/.tweetytweets/claude_token` | `%USERPROFILE%\.tweetytweets\claude_token` |
-| `~/Developer/tweetytweets/references/content-strategy.local.md` | `tweetytweets\references\content-strategy.local.md` |
+```powershell
+copy config.desktop.json config.json
+```
 
-Then edit `config.json` for Windows:
-- `browser.chrome_path` → `C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`
-  (check the real path; JSON needs doubled backslashes)
-- `replies.claude_path` → delete the key (it's a Mac path; the script then finds
-  `claude` on PATH), or set it to the full path of `claude.exe`
-  (`where.exe claude`)
+1. **Telegram bot token**: in Telegram, BotFather → `/mybots` → the bot →
+   API Token. Paste it into `"bot_token": ""` in `config.json`.
+2. **Claude token**: run `claude setup-token`, approve in the browser, then save
+   the printed `sk-ant-oat01-...` token on one line in
+   `%USERPROFILE%\.tweetytweets\claude_token`:
+   ```powershell
+   mkdir $env:USERPROFILE\.tweetytweets -Force; notepad $env:USERPROFILE\.tweetytweets\claude_token
+   ```
+3. If Brave lives elsewhere, fix `browser.chrome_path` (JSON needs `\\`).
 
 ```powershell
 .venv\Scripts\python scripts\doctor.py     # should report nothing blocking

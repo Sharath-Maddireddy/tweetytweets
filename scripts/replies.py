@@ -135,7 +135,7 @@ def claude(prompt: str, exe: str) -> str:
     interactive login (which expires) or on whatever env the caller has.
     """
     token_file = Path.home() / ".tweetytweets" / "claude_token"
-    token = token_file.read_text().strip() if token_file.exists() else ""
+    token = token_file.read_text(encoding="utf-8-sig").strip() if token_file.exists() else ""  # utf-8-sig: Notepad BOM
     if not token:
         raise SystemExit(f"paste the `claude setup-token` token into {token_file}")
     # drop any inherited Claude/Anthropic session settings (e.g. when launched from

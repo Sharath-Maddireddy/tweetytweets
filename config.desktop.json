@@ -1,0 +1,92 @@
+{
+  "_readme": "Copy to config.json (git-ignored) and fill in. The agent asks the questions during onboarding; every field below is documented in README.md.",
+  "handle": "sharathM1812",
+  "_limits": "Do NOT guess these and never hardcode a ceiling: it is a property of YOUR account, not of this tool. Free accounts cap at 280 chars, Premium accounts do not, and it decides what content is even possible. Leave both as null and run:  python scripts/post.py measure --save   (it types into the composer and reads the Post button's state - it never clicks Post). It fills in both fields.",
+  "premium": true,
+  "max_chars": 640,
+  "max_chars_verified": true,
+  "timezone": "Asia/Kolkata",
+  "_timezone_hint": "e.g. 'Asia/Kolkata', 'America/New_York', or 'local' for the machine's timezone",
+  "slots": [
+    "10:00",
+    "18:00",
+    "21:00",
+    "00:00"
+  ],
+  "jitter_minutes": 45,
+  "min_gap_hours": 3,
+  "ai_update_enabled": false,
+  "ai_update_slot": "16:00",
+  "ai_update_header": "Daily AI updates | Day {day}",
+  "research_hour": 11,
+  "window_hours": 36,
+  "subreddits": [
+    "LocalLLaMA",
+    "ClaudeAI",
+    "SaaS",
+    "Entrepreneur",
+    "socialmedia",
+    "InstagramMarketing"
+  ],
+  "x_queries": [
+    "AI agents",
+    "build in public",
+    "creator economy",
+    "Claude Code",
+    "indie hacker India"
+  ],
+  "feeds": {
+    "hn-frontpage": "https://hnrss.org/frontpage?points=150",
+    "simonwillison": "https://simonwillison.net/atom/everything/",
+    "latent-space": "https://www.latent.space/feed",
+    "creatoreconomy": "https://creatoreconomy.so/feed"
+  },
+  "require_verified_source": true,
+  "browser": {
+    "port": 9222,
+    "profile_dir": "",
+    "chrome_path": "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
+    "headless": false
+  },
+  "_research_browser": "Reddit + X search scrape in a SEPARATE browser signed into a throwaway account, so research never touches the posting account. Sign in once with: TWEETY_BROWSER=research python scripts/browser.py launch",
+  "research_browser": {
+    "port": 9223,
+    "profile_dir": "~/.tweetytweets/chrome-research"
+  },
+  "replies": {
+    "accounts": [
+      "theo",
+      "simonw",
+      "swyx",
+      "nutlope",
+      "steventey",
+      "frankdilo",
+      "tibo_maker",
+      "arvidkahl",
+      "jackfriks",
+      "tdinh_me",
+      "yongfook",
+      "sohmehta",
+      "Saboo_Shubham_",
+      "deedydas",
+      "_avichawla",
+      "akshay_pachaar",
+      "ishanagarwal24",
+      "jappleby",
+      "petergyang",
+      "colinandsamir",
+      "jayclouse",
+      "nathanbarry",
+      "starter_story",
+      "A1fiedickens15",
+      "joshsuggss"
+    ],
+    "queries": [],
+    "max_age_min": 120,
+    "max_posts": 6
+  },
+  "telegram": {
+    "bot_token": "",
+    "chat_id": 1334246791
+  }
+}
