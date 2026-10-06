@@ -63,24 +63,46 @@ Sign in there with the **real** account (Email or username, not Google). Then:
 .venv\Scripts\python scripts\replies.py --dry-run     # finds posts + drafts, prints only
 ```
 
-## 5. Schedule the reply queue (20:25 IST daily)
+## 5. Schedule the reply queue (08:30, 20:25, 23:30 IST daily)
 
-Make sure Windows' time zone is India Standard Time. Replace `C:\path\to` with
-the real repo path:
+Three short sessions a day: 08:30 catches US evening + Indian mornings, 20:25
+US morning + Indian evening (the strongest), 23:30 US midday. Each run only
+picks up posts from the last `replies.max_age_min` minutes, and nothing is
+ever sent to Telegram twice, so overlapping runs are fine.
+
+Make sure Windows' time zone is India Standard Time. Run from the repo folder
+(`schtasks` can't give one task several times, so this uses PowerShell):
 
 ```powershell
 mkdir logs -Force
-schtasks /Create /TN "tweetytweets replies" /SC DAILY /ST 20:25 /TR "cmd /c cd /d C:\path\to\tweetytweets && .venv\Scripts\python.exe scripts\replies.py >> logs\replies.log 2>&1"
-schtasks /Run /TN "tweetytweets replies"     # test once, then check logs\replies.log
+$action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c cd /d $PWD && .venv\Scripts\python.exe scripts\replies.py >> logs\replies.log 2>&1"
+$times = "08:30", "20:25", "23:30" | ForEach-Object { New-ScheduledTaskTrigger -Daily -At $_ }
+Register-ScheduledTask -TaskName "tweetytweets replies" -Action $action -Trigger $times -Force
+Start-ScheduledTask -TaskName "tweetytweets replies"     # test once, then check logs\replies.log
 ```
 
 The task runs only while you're logged in, which is what we want: it drives
-the visible Brave windows.
+the Brave windows. To change the times later, edit `$times` and re-run the
+`Register-ScheduledTask` line.
 
-## 6. Keep it awake
+In the research Brave window keep an `x.com` tab open. Each run closes its
+own search tab, and if that was the last tab Brave quits and the next run fails.
 
-Settings → System → Power → Screen and sleep → "When plugged in, put my device
-to sleep after" → **Never**. Leave both Brave windows open (minimised is fine).
+## 6. Keep it awake (screen off is fine)
+
+The PC must stay awake and logged in; the screen does not need to be on.
+
+Settings → System → Power → Screen, sleep & hibernate timeouts:
+
+- "Turn my screen off after" → e.g. **10 minutes** (saves power, runs keep working)
+- "Make my device sleep after" → **Never**
+- On a laptop, also Control Panel → Power Options → "Choose what closing the
+  lid does" → **Do nothing** (plugged in).
+
+Leave both Brave windows open (minimised is fine). Locking the screen
+(Win+L) keeps you logged in, so the task still starts (check
+logs\replies.log the first time); signing out or restarting stops the runs
+until you log back in.
 
 ## 7. Turn the Mac job off
 
