@@ -143,7 +143,8 @@ def claude(prompt: str, exe: str) -> str:
     env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "ANTHROPIC"))}
     env["CLAUDE_CODE_OAUTH_TOKEN"] = token
     out = subprocess.run([exe, "-p", "--tools", "", "--model", "sonnet"], input=prompt,
-                         capture_output=True, text=True, timeout=300, env=env)
+                         capture_output=True, text=True, encoding="utf-8",
+                         timeout=300, env=env)                # utf-8: Windows defaults to cp1252, emoji in posts crash it
     if out.returncode:
         raise SystemExit(f"claude failed: {(out.stderr or out.stdout)[:400]}")
     return out.stdout
