@@ -36,6 +36,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SENT = ROOT / "drafts" / "replies_sent.json"
 
 RESTRICTED_JS = r"/can reply\./i.test(document.body.innerText)"
+MAX_REPLY = 140                                 # chars; longer drafts are dropped
 
 PROMPT = """You draft X replies for @{handle}. He posts them himself after editing.
 
@@ -47,9 +48,11 @@ Context about him, his content strategy and rules (follow the NEVER list):
 For each post below, write 2 reply options he could post, OR "skip" if he has
 no genuine angle on it (better no reply than a forced one).
 
-How replies must read - like a quick reply typed on a phone by a 22-year-old founder:
-- lowercase is fine, contractions, casual. under 200 characters.
-- add something: an opinion, a counterpoint, a small specific detail. never just praise.
+How replies must read - like a seasoned X operator with 200k followers replying in passing:
+- short and sure of itself: one line, ideally under 100 characters, never over {max_len}.
+- one sharp point per reply: a take, a counterpoint, or the detail everyone missed. never just praise.
+- confident, not try-hard. no hedging ("i think", "maybe", "kind of"), no explaining the joke.
+- casual is fine (contractions, lowercase), but it should read like someone people quote.
 - no em dashes, no "it's not X, it's Y", no tidy lists of three, no hashtags,
   no emoji except maybe one "lol"/"tbh"-level casual marker, no questions-as-bait.
 - only claim personal experience that is stated in the context. otherwise give an opinion.
@@ -116,7 +119,7 @@ def draft(posts: list[dict], c: dict) -> list[dict]:
                           for p in sorted((ROOT / "references").glob("*.local.md")))
     slim = [{"url": p["url"], "author": p["extra"].get("author"), "text": p["extra"].get("text")}
             for p in posts]
-    prompt = PROMPT.format(handle=c["handle"], context=context,
+    prompt = PROMPT.format(handle=c["handle"], context=context, max_len=MAX_REPLY,
                            posts=json.dumps(slim, ensure_ascii=False, indent=1))
     txt = claude(prompt, c["claude"])
     try:
@@ -124,6 +127,9 @@ def draft(posts: list[dict], c: dict) -> list[dict]:
     except ValueError as err:
         raise SystemExit(f"model returned no JSON array: {err}\n{txt[:400]}")
     by_url = {r.get("url"): r.get("replies") for r in rows}
+    for u, rs in by_url.items():                  # the model drifts long; enforce it
+        if isinstance(rs, list):
+            by_url[u] = [r for r in rs if len(r) <= MAX_REPLY]
     return [{**p, "drafts": by_url[p["url"]]} for p in posts
             if isinstance(by_url.get(p["url"]), list) and by_url[p["url"]]]
 
