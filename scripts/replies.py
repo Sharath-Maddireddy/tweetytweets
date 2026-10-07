@@ -55,6 +55,17 @@ Context about him, his content strategy and rules (follow the NEVER list):
 For each post below, write 2 reply options he could post, OR "skip" if he has
 no genuine angle on it (better no reply than a forced one).
 
+Match the tone to the post, the way a person would:
+- joke, meme, relatable struggle -> funny: play along, dry or self-deprecating,
+  build on their joke. never explain it, never mock the author.
+- opinion -> agree with a sharper reason, or a respectful counterpoint.
+- technical explainer or insight -> thoughtful: the angle they missed, a tradeoff.
+- launch / milestone / something they built -> genuine interest: a specific
+  question or detail about what they made, not generic congrats.
+- personal story / struggle -> warm and human, relate if the context allows.
+- news -> a quick take on what it means for builders or creators.
+The 2 options may differ in tone if both fit (e.g. one funny, one thoughtful).
+
 How replies must read - like a seasoned X operator with 200k followers replying in passing:
 - short and sure of itself: one line, ideally under 100 characters, never over {max_len}.
 - one sharp point per reply: a take, a counterpoint, or the detail everyone missed. never just praise.
@@ -78,7 +89,8 @@ Posts (JSON):
 {posts}
 
 Answer with ONLY a JSON array, one object per post, same order:
-[{{"url": "...", "replies": ["...", "..."]}}]  or  [{{"url": "...", "replies": "skip"}}]
+[{{"url": "...", "replies": [{{"tone": "funny", "text": "..."}}, {{"tone": "thoughtful", "text": "..."}}]}}]
+or [{{"url": "...", "replies": "skip"}}]. tone is one or two words.
 """
 
 
@@ -145,7 +157,9 @@ def draft(posts: list[dict], c: dict) -> list[dict]:
     by_url = {r.get("url"): r.get("replies") for r in rows}
     for u, rs in by_url.items():                  # the model drifts; enforce it
         if isinstance(rs, list):
-            by_url[u] = [r for r in rs if len(r) <= MAX_REPLY and not AI_TELLS.search(r)]
+            rs = [r if isinstance(r, dict) else {"tone": "", "text": str(r)} for r in rs]
+            by_url[u] = [r for r in rs
+                         if len(r.get("text", "")) <= MAX_REPLY and not AI_TELLS.search(r.get("text", ""))]
     return [{**p, "drafts": by_url[p["url"]]} for p in posts
             if isinstance(by_url.get(p["url"]), list) and by_url[p["url"]]]
 
@@ -182,7 +196,9 @@ def messages(posts: list[dict]) -> list[str]:
     out = [f"<b>Reply queue</b> · {len(posts)} posts · edit before posting, then answer anyone who replies"]
     for n, p in enumerate(posts, 1):
         e = p["extra"]
-        drafts = "\n\n".join(f"<code>{escape(d)}</code>" for d in p["drafts"])
+        drafts = "\n\n".join(
+            f"<b>{escape(d.get('tone', ''))}</b>\n<code>{escape(d.get('text', ''))}</code>"
+            if isinstance(d, dict) else f"<code>{escape(d)}</code>" for d in p["drafts"])
         out.append(f"<b>{n}. {escape((e.get('author') or '').split(' · ')[0])}</b> · {age(p)} · {p['comments']} replies\n"
                    f"<i>{escape((e.get('text') or '')[:280])}</i>\n\n{drafts}\n\n{p['url']}")
     return out
