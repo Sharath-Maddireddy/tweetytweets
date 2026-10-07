@@ -198,7 +198,7 @@ def reddit(subs: list[str] | None = None, t: str = "day") -> list[dict]:
     """
     subs = subs or (settings.load().get("subreddits") or [])
     urls = [f"https://www.reddit.com/r/{s}/top/?t={t}" for s in subs]
-    raw_list = browser.scrape_many(urls, REDDIT_JS, settle=6, close_after="reddit.com")
+    raw_list = browser.scrape_many(urls, REDDIT_JS, settle=6)
     out: list[dict] = []
     for sub, raw in zip(subs, raw_list):
         if not raw:
@@ -261,10 +261,7 @@ def x_search(queries: list[str] | None = None, mode: str = "top") -> list[dict]:
     if not queries:
         return []
     import post
-    try:
-        info = json.loads(browser.evaluate("https://x.com/home", post.LOGIN_JS, settle=4) or "{}")
-    finally:
-        browser.close_tabs_matching("x.com/home")
+    info = json.loads(browser.evaluate("https://x.com/home", post.LOGIN_JS, settle=4) or "{}")
     who = (info.get("handle") or "").lower()
     if not who:
         print("  ! x: research browser not signed in - skipping X search", file=sys.stderr)
@@ -276,7 +273,7 @@ def x_search(queries: list[str] | None = None, mode: str = "top") -> list[dict]:
         return []
     urls =["https://x.com/search?q=" + urllib.parse.quote(q) + f"&src=typed_query&f={mode}"
             for q in queries]
-    raw_list = browser.scrape_many(urls, X_JS, settle=7, close_after="x.com/search")
+    raw_list = browser.scrape_many(urls, X_JS, settle=7)
     out: list[dict] = []
     for q, raw in zip(queries, raw_list):
         if not raw:

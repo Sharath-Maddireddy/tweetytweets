@@ -18,7 +18,6 @@ assert res["port"] != main["port"], (res, main)
 assert res["profile_dir"] != main["profile_dir"], (res, main)
 
 scraped = []
-browser.close_tabs_matching = lambda s: 0
 browser.scrape_many = lambda urls, *a, **k: scraped.extend(urls) or [None] * len(urls)
 post.handle = lambda: "RealMe"
 

@@ -200,11 +200,14 @@ async def settle_page(page: "Session", settle: float, timeout: float = 40) -> No
 
 async def _eval_new_tab(url: str, expr: str, settle: float) -> Any:
     ws = await open_page(url)
-    async with Session(ws) as page:
-        await page.send("Page.enable")
-        await page.send("Runtime.enable")
-        await settle_page(page, settle)
-        return await page.eval(expr)
+    try:
+        async with Session(ws) as page:
+            await page.send("Page.enable")
+            await page.send("Runtime.enable")
+            await settle_page(page, settle)
+            return await page.eval(expr)
+    finally:
+        close_tab(ws.rsplit("/", 1)[-1])      # only the tab we opened
 
 
 def evaluate(url: str, expr: str, settle: float = 4.0) -> Any:
@@ -222,6 +225,14 @@ async def _scrape_many(urls: list[str], expr: str, settle: float) -> list[Any]:
     """
     ws = await open_page(urls[0])
     out: list[Any] = []
+    try:
+        return await _scrape_tab(ws, urls, expr, settle, out)
+    finally:
+        close_tab(ws.rsplit("/", 1)[-1])      # only the tab we opened
+
+
+async def _scrape_tab(ws: str, urls: list[str], expr: str, settle: float,
+                      out: list[Any]) -> list[Any]:
     async with Session(ws) as page:
         await page.send("Page.enable")
         await page.send("Runtime.enable")
@@ -243,21 +254,14 @@ async def _scrape_many(urls: list[str], expr: str, settle: float) -> list[Any]:
     return out
 
 
-def scrape_many(urls: list[str], expr: str, settle: float = 6.0,
-                close_after: str | None = None) -> list[Any]:
-    """Scrape a list of URLs reusing ONE tab, then close it.
-
-    Without this you leak a tab per URL, and a single research run ends up
-    competing with whatever else uses the same browser.
-    """
+def scrape_many(urls: list[str], expr: str, settle: float = 6.0) -> list[Any]:
+    """Scrape a list of URLs reusing ONE tab, then close that tab (and only it:
+    sweeping by URL also closed the user's own x.com tab, and closing a
+    browser's last tab quits it)."""
     if not urls:
         return []
     ensure_chrome()
-    try:
-        return asyncio.run(_scrape_many(urls, expr, settle))
-    finally:
-        if close_after:
-            close_tabs_matching(close_after)
+    return asyncio.run(_scrape_many(urls, expr, settle))
 
 
 def close_tab(tab_id: str) -> bool:
@@ -283,13 +287,16 @@ def screenshot(url: str, out: str, settle: float = 5.0,
 
     async def _shot() -> dict:
         ws = await open_page(url)
-        async with Session(ws) as page:
-            await page.send("Page.enable")
-            await page.send("Runtime.enable")
-            await settle_page(page, settle)
-            res = await page.send("Page.captureScreenshot", format="png",
-                                  captureBeyondViewport=full_page)
-            meta = await page.eval("JSON.stringify({url:location.href,title:document.title})")
+        try:
+            async with Session(ws) as page:
+                await page.send("Page.enable")
+                await page.send("Runtime.enable")
+                await settle_page(page, settle)
+                res = await page.send("Page.captureScreenshot", format="png",
+                                      captureBeyondViewport=full_page)
+                meta = await page.eval("JSON.stringify({url:location.href,title:document.title})")
+        finally:
+            close_tab(ws.rsplit("/", 1)[-1])
         return {"png": base64.b64decode(res["data"]), "meta": json.loads(meta or "{}")}
 
     ensure_chrome()

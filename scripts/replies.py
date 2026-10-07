@@ -137,8 +137,7 @@ def find(c: dict) -> list[dict]:
             authors.add(a)
             pool.append(i)
     pool = pool[: c["max_posts"] * 2]
-    restricted = browser.scrape_many([i["url"] for i in pool], RESTRICTED_JS, settle=5,
-                                     close_after="x.com/")
+    restricted = browser.scrape_many([i["url"] for i in pool], RESTRICTED_JS, settle=5)
     return [i for i, r in zip(pool, restricted) if r is False][: c["max_posts"]]
 
 
