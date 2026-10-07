@@ -83,7 +83,10 @@
     ],
     "queries": [],
     "max_age_min": 120,
-    "max_posts": 6
+    "max_posts": 6,
+    "priority": [
+      "UnnatiTripathii"
+    ]
   },
   "telegram": {
     "bot_token": "",

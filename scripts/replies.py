@@ -53,7 +53,8 @@ Context about him, his content strategy and rules (follow the NEVER list):
 </context>
 
 For each post below, write 2 reply options he could post, OR "skip" if he has
-no genuine angle on it (better no reply than a forced one).
+no genuine angle on it (better no reply than a forced one). Posts marked
+"must_reply" are people he always replies to: never skip those.
 
 Match the tone to the post, the way a person would:
 - joke, meme, relatable struggle -> funny: play along, dry or self-deprecating,
@@ -100,6 +101,8 @@ def cfg() -> dict:
     return {
         "handle": c.get("handle", ""),
         "accounts": r.get("accounts") or [],
+        "priority": r.get("priority") or [],          # every post, every time, never skipped
+        "priority_max_age_min": int(r.get("priority_max_age_min", 1440)),
         "queries": r.get("queries") or [],
         "max_age_min": int(r.get("max_age_min", 90)),
         "max_posts": int(r.get("max_posts", 6)),
@@ -114,15 +117,20 @@ def find(c: dict) -> list[dict]:
     if c["accounts"]:
         qs.append("(" + " OR ".join(f"from:{a}" for a in c["accounts"]) + ") -filter:replies")
     qs += [f"{q} min_faves:10 -filter:replies lang:en" for q in c["queries"]]
-    items = research.x_search(qs, mode="live")
+    pq = "(" + " OR ".join(f"from:{a}" for a in c["priority"]) + ") -filter:replies"
+    items = research.x_search(([pq] if c["priority"] else []) + qs, mode="live")
 
     sent = set(json.loads(SENT.read_text()) if SENT.exists() else [])
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=c["max_age_min"])
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(minutes=c["max_age_min"])
+    p_cutoff = now - timedelta(minutes=c["priority_max_age_min"])
     me = "@" + c["handle"].lower()
     seen, fresh = set(), []
     for it in items:
         url, created = it.get("url") or "", research._parse_dt(it.get("created"))
-        if (not url or url in seen or url in sent or not created or created < cutoff
+        it["priority"] = bool(c["priority"]) and it["source"] == f"x:{pq}"
+        if (not url or url in seen or url in sent or not created
+                or created < (p_cutoff if it["priority"] else cutoff)
                 or me in (it["extra"].get("author") or "").lower()):
             continue
         seen.add(url)
@@ -130,22 +138,25 @@ def find(c: dict) -> list[dict]:
         fresh.append(it)
     # watched accounts first, then the least crowded threads (your reply gets seen)
     fresh.sort(key=lambda i: (not i["watched"], i["comments"]))
+    top = [i for i in fresh if i["priority"]]       # all of them, outside the caps
+    fresh = [i for i in fresh if not i["priority"]]
     authors, pool = set(), []
     for i in fresh:                       # one post per account per round
         a = (i["extra"].get("author") or "").split("@")[-1].split(" ")[0].lower()
         if a not in authors:
             authors.add(a)
             pool.append(i)
-    pool = pool[: c["max_posts"] * 2]
+    pool = top + pool[: c["max_posts"] * 2]
     restricted = browser.scrape_many([i["url"] for i in pool], RESTRICTED_JS, settle=5)
-    return [i for i, r in zip(pool, restricted) if r is False][: c["max_posts"]]
+    ok = [i for i, r in zip(pool, restricted) if r is False]
+    return [i for i in ok if i["priority"]] + [i for i in ok if not i["priority"]][: c["max_posts"]]
 
 
 def draft(posts: list[dict], c: dict) -> list[dict]:
     context = "\n\n".join(p.read_text(encoding="utf-8")
                           for p in sorted((ROOT / "references").glob("*.local.md")))
-    slim = [{"url": p["url"], "author": p["extra"].get("author"), "text": p["extra"].get("text")}
-            for p in posts]
+    slim = [{"url": p["url"], "author": p["extra"].get("author"), "text": p["extra"].get("text"),
+             **({"must_reply": True} if p.get("priority") else {})} for p in posts]
     prompt = PROMPT.format(handle=c["handle"], context=context, max_len=MAX_REPLY,
                            posts=json.dumps(slim, ensure_ascii=False, indent=1))
     txt = claude(prompt, c["claude"])
@@ -154,11 +165,13 @@ def draft(posts: list[dict], c: dict) -> list[dict]:
     except ValueError as err:
         raise SystemExit(f"model returned no JSON array: {err}\n{txt[:400]}")
     by_url = {r.get("url"): r.get("replies") for r in rows}
+    must = {p["url"] for p in posts if p.get("priority")}
     for u, rs in by_url.items():                  # the model drifts; enforce it
         if isinstance(rs, list):
             rs = [r if isinstance(r, dict) else {"tone": "", "text": str(r)} for r in rs]
-            by_url[u] = [r for r in rs
-                         if len(r.get("text", "")) <= MAX_REPLY and not AI_TELLS.search(r.get("text", ""))]
+            good = [r for r in rs
+                    if len(r.get("text", "")) <= MAX_REPLY and not AI_TELLS.search(r.get("text", ""))]
+            by_url[u] = good or (rs if u in must else [])   # priority: never drop the post
     return [{**p, "drafts": by_url[p["url"]]} for p in posts
             if isinstance(by_url.get(p["url"]), list) and by_url[p["url"]]]
 
@@ -198,7 +211,8 @@ def messages(posts: list[dict]) -> list[str]:
         drafts = "\n\n".join(
             f"<b>{escape(d.get('tone', ''))}</b>\n<code>{escape(d.get('text', ''))}</code>"
             if isinstance(d, dict) else f"<code>{escape(d)}</code>" for d in p["drafts"])
-        out.append(f"<b>{n}. {escape((e.get('author') or '').split(' · ')[0])}</b> · {age(p)} · {p['comments']} replies\n"
+        star = "⭐ " if p.get("priority") else ""
+        out.append(f"<b>{star}{n}. {escape((e.get('author') or '').split(' · ')[0])}</b> · {age(p)} · {p['comments']} replies\n"
                    f"<i>{escape((e.get('text') or '')[:280])}</i>\n\n{drafts}\n\n{p['url']}")
     return out
 
