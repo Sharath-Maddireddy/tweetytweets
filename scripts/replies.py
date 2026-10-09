@@ -42,7 +42,7 @@ MAX_REPLY = 140                                 # chars; longer drafts are dropp
 AI_TELLS = re.compile(
     r"[—–;#]|\bit'?s not\b.*\bit'?s\b|\bthe real \w+ is\b|^honestly\b|great point|so true"
     r"|game.?changer|underrated|hot take|let that sink in|here'?s the thing|spot on"
-    r"|couldn'?t agree more|\b100%|\bdelve\b|\btestament to\b|\bat the end of the day\b",
+    r"|couldn'?t agree more|\blol\b|\blmao\b|\b100%|\bdelve\b|\btestament to\b|\bat the end of the day\b",
     re.I)
 
 PROMPT = """You draft X replies for @{handle}. He posts them himself after editing.
@@ -73,7 +73,7 @@ How replies must read - like a seasoned X operator with 200k followers replying 
 - confident, not try-hard. no hedging ("i think", "maybe", "kind of"), no explaining the joke.
 - casual is fine (contractions, lowercase), but it should read like someone people quote.
 - no em dashes, no "it's not X, it's Y", no tidy lists of three, no hashtags,
-  no emoji except maybe one "lol"/"tbh"-level casual marker, no questions-as-bait.
+  no emoji, no "lol" or "lmao" (he finds them off-putting), no questions-as-bait.
 - it must read as written by a person, not a model. the giveaways to avoid:
   balanced two-clause sentences, colon or semicolon setups, "the real X is Y",
   restating the post back, summing up, stock phrases ("great point", "this is so
