@@ -90,8 +90,11 @@ Posts (JSON):
 {posts}
 
 Answer with ONLY a JSON array, one object per post, same order:
-[{{"url": "...", "replies": [{{"tone": "funny", "text": "..."}}, {{"tone": "thoughtful", "text": "..."}}]}}]
+[{{"url": "...", "replies": [{{"tone": "funny", "text": "..."}}, {{"tone": "thoughtful", "text": "..."}}],
+  "pick": 1, "why": "..."}}]
 or [{{"url": "...", "replies": "skip"}}]. tone is one or two words.
+"pick" is the number (1 or 2) of the option you'd post, "why" says why in under 12 words
+(e.g. "his post is a joke, play along" / "adds the angle nobody in the replies has").
 """
 
 
@@ -164,16 +167,24 @@ def draft(posts: list[dict], c: dict) -> list[dict]:
         rows = json.loads(txt[txt.index("["): txt.rindex("]") + 1])
     except ValueError as err:
         raise SystemExit(f"model returned no JSON array: {err}\n{txt[:400]}")
-    by_url = {r.get("url"): r.get("replies") for r in rows}
+    by_url = {r.get("url"): r for r in rows}
     must = {p["url"] for p in posts if p.get("priority")}
-    for u, rs in by_url.items():                  # the model drifts; enforce it
-        if isinstance(rs, list):
-            rs = [r if isinstance(r, dict) else {"tone": "", "text": str(r)} for r in rs]
-            good = [r for r in rs
-                    if len(r.get("text", "")) <= MAX_REPLY and not AI_TELLS.search(r.get("text", ""))]
-            by_url[u] = good or (rs if u in must else [])   # priority: never drop the post
-    return [{**p, "drafts": by_url[p["url"]]} for p in posts
-            if isinstance(by_url.get(p["url"]), list) and by_url[p["url"]]]
+    out = []
+    for p in posts:
+        row = by_url.get(p["url"]) or {}
+        rs = row.get("replies")
+        if not isinstance(rs, list) or not rs:
+            continue
+        rs = [r if isinstance(r, dict) else {"tone": "", "text": str(r)} for r in rs]
+        pick = row.get("pick")
+        if isinstance(pick, int) and 1 <= pick <= len(rs):
+            rs[pick - 1]["picked"] = True
+        good = [r for r in rs                          # the model drifts; enforce it
+                if len(r.get("text", "")) <= MAX_REPLY and not AI_TELLS.search(r.get("text", ""))]
+        good = good or (rs if p["url"] in must else [])  # priority: never drop the post
+        if good:
+            out.append({**p, "drafts": good, "why": row.get("why", "")})
+    return out
 
 
 def claude(prompt: str, exe: str) -> str:
@@ -209,8 +220,10 @@ def messages(posts: list[dict]) -> list[str]:
     for n, p in enumerate(posts, 1):
         e = p["extra"]
         drafts = "\n\n".join(
-            f"<b>{escape(d.get('tone', ''))}</b>\n<code>{escape(d.get('text', ''))}</code>"
-            if isinstance(d, dict) else f"<code>{escape(d)}</code>" for d in p["drafts"])
+            f"<b>{'👉 ' if d.get('picked') else ''}{escape(d.get('tone', ''))}</b>\n"
+            f"<code>{escape(d.get('text', ''))}</code>" for d in p["drafts"])
+        if p.get("why") and any(d.get("picked") for d in p["drafts"]):
+            drafts += f"\n\n👉 <i>{escape(p['why'])}</i>"
         star = "⭐ " if p.get("priority") else ""
         out.append(f"<b>{star}{n}. {escape((e.get('author') or '').split(' · ')[0])}</b> · {age(p)} · {p['comments']} replies\n"
                    f"<i>{escape((e.get('text') or '')[:280])}</i>\n\n{drafts}\n\n{p['url']}")
