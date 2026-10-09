@@ -88,6 +88,17 @@ the Brave windows. To change the times later, edit `$times` and re-run the
 In the research Brave window keep an `x.com` tab open. Each run closes its
 own search tab, and if that was the last tab Brave quits and the next run fails.
 
+## 5b. Refresh the reply list weekly (Sunday 10:00 IST)
+
+Drops accounts that went quiet (14 days) or grew past 500k followers, adds up
+to 5 relevant new ones (people replying to you + the week's strong niche posts),
+and sends the changes to Telegram. Priority accounts are never touched.
+
+```powershell
+$a = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c cd /d $PWD && .venv\Scripts\python.exe scripts\refresh_accounts.py >> logs\refresh.log 2>&1"
+Register-ScheduledTask -TaskName "tweetytweets refresh accounts" -Action $a -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 10:00) -Force
+```
+
 ## 6. Keep it awake (screen off is fine)
 
 The PC must stay awake and logged in; the screen does not need to be on.
