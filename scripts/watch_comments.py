@@ -45,7 +45,7 @@ strongest reach signal. So:
 - match their tone: joke back to a joke, straight answer to a question,
   friendly and unbothered to pushback (concede what's fair, never defensive).
 - one or two short lines, casual, lowercase fine, under 140 characters.
-- no em dashes, no hashtags, no "lol", no "great question", no "thanks for sharing".
+- no em dashes, no hashtags, "lol" only rarely, no "great question", no "thanks for sharing".
 - only claim things stated in the post or context. never invent numbers.
 
 Comment from {author}:
