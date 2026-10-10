@@ -73,6 +73,13 @@ FUNDING_QUERIES = [
     'beverage brand raises funding India',
     'D2C startup funding announcement',
 ]
+# Who they are, straight from bios: one people-search page = ~20 profile cards.
+PEOPLE_QUERIES = [
+    "D2C founder India", "D2C brand founder", "cofounder D2C brand", "founder skincare brand India",
+    "founder beauty brand India", "founder food brand India", "founder fashion brand India",
+    "head of marketing D2C", "brand marketing D2C India", "influencer marketing manager India",
+    "growth D2C India", "founder consumer brand India",
+]
 MENTION = re.compile(r"@([A-Za-z0-9_]{2,15})")
 
 PROMPT = """You qualify sales leads for Creonnect and draft outreach from its cofounder @{handle}.
@@ -95,6 +102,10 @@ If "signal" starts with "recently raised", the post is a funding announcement
 in it. The author of a news post is never a lead. For a funded lead, open the DM
 with a short congrats on the raise and connect it to growth; don't assume
 anything about their plans beyond what the post says.
+For "profile match" candidates, "bio" is their X profile card and there is no
+post: qualify on the bio alone, open the DM on something specific in their bio
+(their brand, category, role), and set "public_reply" to "". Bios that are vague,
+aspirational ("future founder"), or not clearly tied to a consumer brand: reject.
 For funded candidates, "bio" is their X profile card and "brand" is the company
 that raised: only qualify if the card clearly IS that brand or its founder/team
 (a same-named account in another country or field is a reject). There is no X
@@ -127,9 +138,15 @@ def load() -> dict:
     return json.loads(LEADS.read_text(encoding="utf-8")) if LEADS.exists() else {}
 
 
-USER_JS = r"""JSON.stringify([...document.querySelectorAll('[data-testid="UserCell"]')].map(c => ({
-  handle: ((c.querySelector('a[href^="/"]') || {}).getAttribute?.('href') || '').replace('/', ''),
-  text: c.innerText.replace(/\n+/g, ' | ').slice(0, 260)})))"""
+USER_JS = r"""(async () => {
+  // people results load as you scroll; read only the main column (the sidebar's
+  // "Who to follow" cells are UserCells too)
+  const col = () => document.querySelector('[data-testid="primaryColumn"]') || document;
+  for (let i = 0; i < 6; i++) { window.scrollBy(0, 2500); await new Promise(r => setTimeout(r, 1200)); }
+  return JSON.stringify([...col().querySelectorAll('[data-testid="UserCell"]')].map(c => ({
+    handle: ((c.querySelector('a[href^="/"]') || {}).getAttribute?.('href') || '').replace('/', ''),
+    text: c.innerText.replace(/\n+/g, ' | ').slice(0, 260)})));
+})()"""
 
 
 def vet_authors(found: dict, now) -> list[dict]:
@@ -173,6 +190,20 @@ def funded_cands(known: dict, n: int, now) -> list[dict]:
     return out
 
 
+def people_cands(known: dict, me: str) -> list[dict]:
+    urls = [f"https://x.com/search?q={urllib.parse.quote(q)}&src=typed_query&f=user" for q in PEOPLE_QUERIES]
+    out, seen = [], set()
+    for q, r in zip(PEOPLE_QUERIES, browser.scrape_many(urls, USER_JS, settle=7)):
+        for c in json.loads(r or "[]"):
+            h = c.get("handle", "")
+            if not h or "/" in h or h.lower() in seen or h.lower() in known or h.lower() == me.lower():
+                continue
+            seen.add(h.lower())
+            out.append({"handle": h, "bio": c["text"], "post_url": f"https://x.com/{h}",
+                        "post": "", "signal": f"profile match: {q}"})
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -180,6 +211,9 @@ def main() -> None:
     ap.add_argument("--funding", action="store_true",
                     help="brands that raised in the last 35 days (Inc42 tables), found on X")
     ap.add_argument("--brands", type=int, default=10, help="--funding: brands per run")
+    ap.add_argument("--people", action="store_true",
+                    help="X people search for D2C founders / brand & marketing leads (bio-based)")
+    ap.add_argument("--max", type=int, default=MAX_LEADS, help="max qualified leads per run")
     a = ap.parse_args()
     cfg = settings.load()
     me = cfg["handle"]
@@ -190,7 +224,12 @@ def main() -> None:
 
     # 1. signals
     found: dict[str, dict] = {}
-    if a.funding:
+    if a.people:
+        cands = people_cands(known, me)
+        print(f"people search -> {len(cands)} profiles to judge", flush=True)
+        if not cands:
+            return
+    elif a.funding:
         cands = funded_cands(known, a.brands, now)
         print(f"funded brands -> {len(cands)} X accounts to judge", flush=True)
         if not cands:
@@ -202,7 +241,7 @@ def main() -> None:
                 "post_url": it["url"], "post": (it["extra"]["text"] or "")[:400],
                 "signal": it["extra"]["query"].split(" since:")[0]})
         found = {h: v for h, v in found.items() if h and h.lower() != me.lower() and h.lower() not in known}
-    if not a.funding:
+    if not (a.funding or a.people):
         cands = vet_authors(found, now)
         print(f"signals: {len(items)} posts, {len(found)} new authors, vetted {len(cands)}", flush=True)
         if not cands:
@@ -211,7 +250,7 @@ def main() -> None:
     # 3. qualify + draft
     context = "\n\n".join(p.read_text(encoding="utf-8")
                           for p in sorted((replies.ROOT / "references").glob("*.local.md")))
-    txt = replies.claude(PROMPT.format(handle=me, context=context, max_leads=MAX_LEADS,
+    txt = replies.claude(PROMPT.format(handle=me, context=context, max_leads=a.max,
                                        cands=json.dumps(cands, ensure_ascii=False, indent=1)),
                          replies.cfg()["claude"])
     try:
@@ -220,7 +259,7 @@ def main() -> None:
         raise SystemExit(f"model returned no JSON array:\n{txt[:400]}")
     by = {c["handle"].lower(): c for c in cands}
     leads = [{**by[p["handle"].lower().lstrip("@")], **p} for p in picked
-             if isinstance(p, dict) and p.get("handle", "").lower().lstrip("@") in by][:MAX_LEADS]
+             if isinstance(p, dict) and p.get("handle", "").lower().lstrip("@") in by][:a.max]
 
     # 4. deliver
     if not leads:
@@ -240,6 +279,8 @@ def main() -> None:
             f"https://x.com/{l['handle']}")
     if a.dry_run:
         print("\n\n----\n\n".join(msgs))
+        (replies.ROOT / "drafts" / "leads_batch.json").write_text(
+            json.dumps(leads, indent=1, ensure_ascii=False), encoding="utf-8")   # for review / dm.py
         return
     if leads:
         replies.send(msgs, cfg["telegram"])

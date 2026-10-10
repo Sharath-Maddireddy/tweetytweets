@@ -247,7 +247,7 @@ async def _scrape_tab(ws: str, urls: list[str], expr: str, settle: float,
                     continue
                 await settle_page(page, settle)
             try:
-                out.append(await page.eval(expr))
+                out.append(await page.eval(expr, await_promise=True))   # expr may be async (scrolling)
             except (CDPError, OSError, asyncio.TimeoutError) as err:
                 out.append(None)
                 print(f"  ! eval failed on {u[:60]}: {err}", file=sys.stderr)

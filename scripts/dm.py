@@ -42,10 +42,22 @@ window.__deepText = () => { let t = ''; const walk = (root, d) => { if (d > 8) r
 true"""
 
 
-async def run(to: str, text: str, check: bool) -> dict:
+FOLLOW_JS = """(() => { const b = [...document.querySelectorAll('[data-testid$="-follow"]')]
+    .find(x => /^Follow/.test(x.innerText.trim()));
+  if (!b) return document.querySelector('[data-testid$="-unfollow"]') ? 'already' : 'no-button';
+  b.click(); return 'followed'; })()"""
+
+
+async def run(to: str, text: str, check: bool, follow: bool = False) -> dict:
     page = await post._open(f"https://x.com/{to}")
     try:
         await browser.settle_page(page, 6)
+        followed = None
+        if follow and not check:
+            followed = await page.eval(FOLLOW_JS)
+            await asyncio.sleep(1.5)
+        if not text:
+            return {"sent": False, "followed": followed, "to": to}
         if not await page.eval("""!!document.querySelector('[data-testid="sendDMFromProfile"]')"""):
             return {"sent": False, "error": f"@{to} has no Message button (DMs closed to you)"}
         await page.eval("""document.querySelector('[data-testid="sendDMFromProfile"]').click()""")
@@ -80,7 +92,7 @@ async def run(to: str, text: str, check: bool) -> dict:
             await asyncio.sleep(1.0)
             box = await page.eval(f"(__deep({json.dumps(COMPOSER)}) || {{}}).value || ''")
             if probe.strip('"') not in box and await page.eval(f"__deepText().includes({probe})"):
-                return {"sent": True, "to": to, "url": await page.eval("location.href")}
+                return {"sent": True, "to": to, "followed": followed, "url": await page.eval("location.href")}
         return {"sent": "unverified", "to": to,
                 "note": "clicked send but couldn't read the message back; check the DM thread"}
     finally:
@@ -91,11 +103,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--to", required=True)
-    ap.add_argument("--text", required=True)
+    ap.add_argument("--text", default="", help="omit with --follow to only follow")
+    ap.add_argument("--follow", action="store_true", help="follow the account first")
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args()
     post.require_session()                                   # refuses unless signed in as config handle
-    print(json.dumps(asyncio.run(run(a.to.lstrip("@"), a.text, a.check)), indent=1, ensure_ascii=False))
+    print(json.dumps(asyncio.run(run(a.to.lstrip("@"), a.text, a.check, a.follow)), indent=1, ensure_ascii=False))
 
 
 if __name__ == "__main__":
