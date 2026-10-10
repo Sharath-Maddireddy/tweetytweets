@@ -16,12 +16,16 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from html import escape
 
 os.environ["TWEETY_BROWSER"] = "research"      # before anything reads settings
 
+import browser
+import funding
 import refresh_accounts
 import replies
 import research
@@ -55,6 +59,22 @@ QUERIES = [
     'D2C brand instagram marketing India',
 ]
 
+# Recently funded consumer brands: fresh budget and investors asking for growth.
+# These posts are mostly from news accounts, so the leads are the brand/founder
+# handles MENTIONED in them, not the author.
+FUNDING_QUERIES = [
+    'D2C raises seed round',
+    'D2C brand raises pre-series A',
+    'D2C brand raises Series A India',
+    'consumer brand raises funding India',
+    'skincare brand raises funding India',
+    'food brand raises funding India',
+    'fashion brand raises funding India',
+    'beverage brand raises funding India',
+    'D2C startup funding announcement',
+]
+MENTION = re.compile(r"@([A-Za-z0-9_]{2,15})")
+
 PROMPT = """You qualify sales leads for Creonnect and draft outreach from its cofounder @{handle}.
 
 About him and Creonnect:
@@ -69,13 +89,22 @@ What Creonnect offers brands, use ONLY these facts:
 - Right now brands are onboarded personally by the team. The offer is a 15-minute demo call.
 - No customer numbers or results exist yet: never claim any.
 
-Candidates (JSON): handle, bio, followers, and the post that surfaced them:
+Candidates (JSON): handle, bio, followers, and the post that surfaced them.
+If "signal" starts with "recently raised", the post is a funding announcement
+(often by a news account): the candidate may be the brand or its founder named
+in it. The author of a news post is never a lead. For a funded lead, open the DM
+with a short congrats on the raise and connect it to growth; don't assume
+anything about their plans beyond what the post says.
+For funded candidates, "bio" is their X profile card and "brand" is the company
+that raised: only qualify if the card clearly IS that brand or its founder/team
+(a same-named account in another country or field is a reject). There is no X
+post to reply to, so set "public_reply" to "" for them.
 {cands}
 
 A lead QUALIFIES only if they are a decision-maker (founder, marketing / growth /
 brand / influencer lead) at a brand, or the brand account itself, that runs or
 would run Instagram creator campaigns, preferably in India.
-REJECT: influencer or marketing agencies, creator platforms / tools (competitors),
+REJECT: investors, VCs, angel networks, influencer or marketing agencies, creator platforms / tools (competitors),
 creators and influencers themselves, recruiters, job boards, crypto/web3, news,
 huge brands that buy through agencies, anyone whose fit is a guess.
 
@@ -98,40 +127,86 @@ def load() -> dict:
     return json.loads(LEADS.read_text(encoding="utf-8")) if LEADS.exists() else {}
 
 
+USER_JS = r"""JSON.stringify([...document.querySelectorAll('[data-testid="UserCell"]')].map(c => ({
+  handle: ((c.querySelector('a[href^="/"]') || {}).getAttribute?.('href') || '').replace('/', ''),
+  text: c.innerText.replace(/\n+/g, ' | ').slice(0, 260)})))"""
+
+
+def vet_authors(found: dict, now) -> list[dict]:
+    """Keyword-search authors: real, active, not a mega account."""
+    hs = list(found)[:25]                      # profile visits are what trip X rate limits
+    info = refresh_accounts.vet(hs) if hs else {}
+    out = []
+    for h in hs:
+        d = info[h]
+        if (not d.get("missing") and 100 <= d["n"] <= 300_000 and d["last_dt"]
+                and d["last_dt"] > now - timedelta(days=LOOKBACK_DAYS)):
+            out.append({"handle": h, "bio": d.get("bio", ""), "followers": d["n"], **found[h]})
+    return out
+
+
+def funded_cands(known: dict, n: int, now) -> list[dict]:
+    """Brands that just raised (Inc42) -> their X accounts via people search.
+    Each candidate carries the brand + raise; Claude decides if it's really them."""
+    brands = [b for b in funding.recent(35)
+              if re.search(r"D2C|QSR|F&B|Food|Beauty", b["sector"])
+              and f"brand:{b['name'].lower()}" not in known][:n]
+    urls, keys = [], []
+    for b in brands:
+        for q in (b["name"], f"{b['name']} founder"):
+            urls.append(f"https://x.com/search?q={urllib.parse.quote(q)}&src=typed_query&f=user")
+            keys.append(b)
+    raw = browser.scrape_many(urls, USER_JS, settle=7) if urls else []
+    out, seen = [], set()
+    for b, r in zip(keys, raw):
+        word = max(re.findall(r"[a-z0-9]+", b["name"].lower()), key=len, default="")
+        for c in json.loads(r or "[]")[:8]:
+            h = c.get("handle", "")
+            if not h or h.lower() in seen or h.lower() in known or word not in c["text"].lower():
+                continue
+            seen.add(h.lower())
+            out.append({"handle": h, "bio": c["text"], "brand": b["name"],
+                        "post_url": b["source"], "post": f"{b['name']} raised {b['amount']} "
+                        f"({b['round'] or 'round'}) on {b['date']}, investors: {b['investors'][:100]}",
+                        "signal": f"recently raised: {b['round'] or 'round'} {b['amount']} on {b['date']}"})
+        known[f"brand:{b['name'].lower()}"] = {"status": "searched", "surfaced_at": now.isoformat(), **b}
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--funding", action="store_true",
+                    help="brands that raised in the last 35 days (Inc42 tables), found on X")
+    ap.add_argument("--brands", type=int, default=10, help="--funding: brands per run")
     a = ap.parse_args()
     cfg = settings.load()
     me = cfg["handle"]
     known = load()
     now = datetime.now(timezone.utc)
-    since = (now - timedelta(days=LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+    days = 30 if a.funding else LOOKBACK_DAYS
+    since = (now - timedelta(days=days)).strftime("%Y-%m-%d")
 
     # 1. signals
     found: dict[str, dict] = {}
-    items = research.x_search([f"{q} since:{since} -filter:replies" for q in QUERIES], mode="top")
-    for it in items:
-        h = refresh_accounts.handle_of(it)
-        if not h or h.lower() == me.lower() or h.lower() in known:
-            continue
-        found.setdefault(h, {"post_url": it["url"], "post": (it["extra"]["text"] or "")[:400],
-                             "signal": it["extra"]["query"].split(" since:")[0]})
-    print(f"signals: {len(items)} posts, {len(found)} new authors", flush=True)
-
-    # 2. vet: real, active, not a mega account
-    hs = list(found)[:25]       # profile visits are what trip X rate limits
-    info = refresh_accounts.vet(hs) if hs else {}
-    cands = []
-    for h in hs:
-        d = info[h]
-        if (not d.get("missing") and 100 <= d["n"] <= 300_000 and d["last_dt"]
-                and d["last_dt"] > now - timedelta(days=LOOKBACK_DAYS)):
-            cands.append({"handle": h, "bio": d.get("bio", ""), "followers": d["n"], **found[h]})
-    print(f"vetted: {len(cands)}", flush=True)
-    if not cands:
-        return
+    if a.funding:
+        cands = funded_cands(known, a.brands, now)
+        print(f"funded brands -> {len(cands)} X accounts to judge", flush=True)
+        if not cands:
+            return
+    else:
+        items = research.x_search([f"{q} since:{since} -filter:replies" for q in QUERIES], mode="top")
+        for it in items:
+            found.setdefault(refresh_accounts.handle_of(it), {
+                "post_url": it["url"], "post": (it["extra"]["text"] or "")[:400],
+                "signal": it["extra"]["query"].split(" since:")[0]})
+        found = {h: v for h, v in found.items() if h and h.lower() != me.lower() and h.lower() not in known}
+    if not a.funding:
+        cands = vet_authors(found, now)
+        print(f"signals: {len(items)} posts, {len(found)} new authors, vetted {len(cands)}", flush=True)
+        if not cands:
+            return
 
     # 3. qualify + draft
     context = "\n\n".join(p.read_text(encoding="utf-8")
@@ -148,22 +223,26 @@ def main() -> None:
              if isinstance(p, dict) and p.get("handle", "").lower().lstrip("@") in by][:MAX_LEADS]
 
     # 4. deliver
-    msgs = [f"<b>🎯 {len(leads)} brand leads</b>\nFor each: send the public reply today, "
-            f"the DM tomorrow. Skip anyone who doesn't look right."]
+    if not leads:
+        print("no qualified leads this run", flush=True)
+    msgs = [f"<b>🎯 {len(leads)} brand leads</b>\nWhere there's a public reply, send it first and "
+            f"the DM a day later. Skip anyone who doesn't look right."]
     for n, l in enumerate(leads, 1):
         msgs.append(
             f"<b>{n}. @{escape(l['handle'])}</b> · {escape(l.get('role', ''))}"
             f"{' @ ' + escape(l['company']) if l.get('company') else ''} · fit {l.get('score', '?')}/5\n"
             f"<i>{escape(l.get('bio', '')[:160])}</i>\n"
             f"why: {escape(l.get('why', ''))}\n\n"
-            f"<b>their post</b> ({escape(l['signal'])})\n<i>{escape(l['post'][:240])}</i>\n{l['post_url']}\n\n"
-            f"<b>1. public reply (today)</b>\n<code>{escape(l.get('public_reply', ''))}</code>\n\n"
-            f"<b>2. DM (tomorrow)</b>\n<code>{escape(l.get('dm', ''))}</code>\n"
+            f"<b>signal</b> ({escape(l['signal'])})\n<i>{escape(l['post'][:240])}</i>\n{l['post_url']}\n\n"
+            + (f"<b>1. public reply (today)</b>\n<code>{escape(l['public_reply'])}</code>\n\n"
+               f"<b>2. DM (tomorrow)</b>\n" if l.get("public_reply") else "<b>DM</b>\n")
+            + f"<code>{escape(l.get('dm', ''))}</code>\n"
             f"https://x.com/{l['handle']}")
     if a.dry_run:
         print("\n\n----\n\n".join(msgs))
         return
-    replies.send(msgs, cfg["telegram"])
+    if leads:
+        replies.send(msgs, cfg["telegram"])
     for l in leads:
         known[l["handle"].lower()] = {**l, "surfaced_at": now.isoformat(), "status": "new"}
     for c in cands:                       # rejected ones too, so they aren't re-judged daily
