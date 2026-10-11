@@ -113,7 +113,7 @@ async def run(url: str, note: str, check: bool, name: str = "") -> dict:
         await asyncio.sleep(3)
     finally:
         await post._close(page)
-    sent = browser.evaluate("https://www.linkedin.com/mynetwork/invitation-manager/sent/", "document.body.innerText", settle=8) or ""
+    sent = await browser._eval_new_tab("https://www.linkedin.com/mynetwork/invitation-manager/sent/", "document.body.innerText", 8) or ""
     return {"sent": name in sent or "unverified", "with_note": used_note, "name": name}
 
 
