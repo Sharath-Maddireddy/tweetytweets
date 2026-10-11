@@ -31,6 +31,9 @@ window.__all = (sel) => { const out = []; const walk = (root, d) => { if (d > 8)
 window.__btn = (re) => __all('button, a, div[role="button"], span[role="button"]')
   .find(b => (re.test((b.innerText || '').trim()) || re.test((b.getAttribute('aria-label') || '').trim()))
                && (b.offsetParent !== null || b.getClientRects().length));
+window.__dlgBtn = (re) => { const d = __all('[role="dialog"]').find(x => /invitation/i.test(x.innerText || ''));
+  if (!d) return null; const scope = [...d.querySelectorAll('button')].concat(d.shadowRoot ? [...d.shadowRoot.querySelectorAll('button')] : []);
+  return scope.find(b => re.test((b.innerText || '').trim()) || re.test((b.getAttribute('aria-label') || '').trim())); };
 window.__box = () => __all('textarea[name="message"], #custom-message, textarea')[0];
 true"""
 
@@ -44,7 +47,12 @@ async def click(page, pattern: str) -> bool:
     return await page.eval(f"(() => {{ const b = __btn({pattern}); if (!b) return false; b.click(); return true; }})()")
 
 
+NOTE_MAX = 200          # free plan: 200 chars, and only a few noted invites per month
+
+
 async def run(url: str, note: str, check: bool) -> dict:
+    if len(note) > NOTE_MAX:
+        return {"sent": False, "error": f"note is {len(note)} chars; LinkedIn free plan allows {NOTE_MAX}"}
     page = await post._open(url)
     try:
         await browser.settle_page(page, 7)
@@ -81,8 +89,15 @@ async def run(url: str, note: str, check: bool) -> dict:
         if check:
             return {"sent": False, "check": "dialog ready, nothing sent", "with_note": used_note, **st}
         await page.eval(FIND)
-        if not await click(page, r"/^Send( invitation| now)?$|Send without a note/i"):
-            return {"sent": False, "error": "send button not found", "with_note": used_note}
+        btn = r"/^Send( invitation| now)?$|Send without a note/i"
+        if await page.eval(f"(() => {{ const b = __dlgBtn({btn}); return !b ? 'missing' : (b.disabled || b.getAttribute('aria-disabled') === 'true') ? 'disabled' : 'ok'; }})()") != "ok":
+            limit = await page.eval(r"""(__all('[role="dialog"]').map(d => d.innerText).join(' ').match(/[^\n]*(remaining|limit)[^\n]*/i) || [''])[0]""")
+            return {"sent": False, "error": "send button missing or disabled", "with_note": used_note, "dialog": limit}
+        # a real (trusted) mouse click at the dialog's Send button; LinkedIn ignored el.click() here
+        pos = json.loads(await page.eval(f"""(() => {{ const b = __dlgBtn({btn}); b.scrollIntoView({{block: 'center'}});
+            const r = b.getBoundingClientRect(); return JSON.stringify({{x: r.x + r.width / 2, y: r.y + r.height / 2}}); }})()"""))
+        for ev in ("mousePressed", "mouseReleased"):
+            await page.send("Input.dispatchMouseEvent", type=ev, x=pos["x"], y=pos["y"], button="left", clickCount=1)
         for _ in range(10):
             await asyncio.sleep(1.0)
             await page.eval(FIND)
