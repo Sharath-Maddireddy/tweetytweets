@@ -99,6 +99,17 @@ $a = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c cd /d $PWD && .ven
 Register-ScheduledTask -TaskName "tweetytweets refresh accounts" -Action $a -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 10:00) -Force
 ```
 
+## 5c. Daily post drafts (20:15 IST)
+
+Three post options for tonight, with a pick, sent to Telegram. It never posts;
+you post at 21:00. Update `references/facts.local.md` when things ship so the
+posts have fresh, true material.
+
+```powershell
+$a = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c cd /d $PWD && .venv\Scripts\python.exe scripts\daily_post.py >> logs\daily_post.log 2>&1"
+Register-ScheduledTask -TaskName "tweetytweets daily post" -Action $a -Trigger (New-ScheduledTaskTrigger -Daily -At 20:15) -Force
+```
+
 ## 6. Keep it awake (screen off is fine)
 
 The PC must stay awake and logged in; the screen does not need to be on.
