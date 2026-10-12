@@ -18,6 +18,17 @@ things ship; the daily post drafter reads it.
 - Credits and Razorpay billing.
 - Brand discovery ranks creators by a real score instead of loose matching.
 
+## Real data points (measured; best post material, use the exact numbers)
+- First week on X (Oct 5-10): 3 posts got 256 views total; 30 replies got 3,036 views (~12x).
+  Best reply: 1,004 views (on a big account's post about YouTube's sale to Google).
+- Study of 89 viral posts in AI/creator X (30 days to Oct 5, 300+ likes): 63 contained a
+  number, 47 opened with a claim, 38 with a number, 4 with a question, 2 used hashtags.
+- Inc42 funding tables: 32 Indian consumer brands raised money between Sep 7 and Oct 9
+  (22 D2C; 16 at pre-seed, seed or pre-Series A); 92 startups across all sectors.
+- Outreach: 9 LinkedIn requests to marketing heads at newly funded brands, 2 accepted
+  within a day (Oct 11-12).
+- 48 git worktrees of the Creonnect repo, 28 active in one week (early Oct).
+
 ## Lessons from building (fine to post as opinions)
 - Instagram rate-limits media downloads; the fix was a cooldown, not retrying harder.
 - Showing "honest states" (no data, not enough data) beats showing a confident wrong number.

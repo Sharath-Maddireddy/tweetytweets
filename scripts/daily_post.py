@@ -36,9 +36,24 @@ quotes, customers or results):
 His recent posts, newest first, with how they did:
 {history}
 
+Posts that went viral in his niche (structure only, never copy wording or claims):
+{examples}
+
+STYLE (he asked for this explicitly): SPICY TAKES. Strong, defensible opinions about
+industry practices that a real share of his audience will disagree with and reply to.
+Topics he owns: influencer / creator marketing in India, follower counts and vanity
+metrics, how brands pick creators, the creator economy, building with AI agents.
+Good: "Influencer marketing in India is mostly brands paying for followers they can't
+verify." / "Micro creators aren't cheaper. They're priced correctly. Big creators are
+overpriced." / "Vibe coding didn't kill software engineers. It killed the ones whose
+whole job was typing."
+Rules for spice: attack practices and ideas, NEVER a named person, brand or company;
+no politics, religion, gender or region-bashing; nothing he couldn't defend in the
+replies. Safe, balanced or "it depends" takes are a fail. Short: 1-3 lines usually.
+A real data point can back a take, but the take comes first.
+
 Write 3 options, each a DIFFERENT format and topic, none repeating a recent post:
-- formats that worked for him: a specific surprising number + short punchline,
-  a sharp contrast (A is X, B is Y, so what), a short honest build-in-public moment.
+- formats: one-line claim + twist, contrast (A does X, B does Y), short list then verdict.
 - one sharp idea, under 280 characters, short lines, blank line between beats,
   hook in the first 6-8 words. No hashtags, no emoji, no em dashes, no links,
   no "bookmark this", no questions-as-bait, no product pitch line.
@@ -46,7 +61,7 @@ Write 3 options, each a DIFFERENT format and topic, none repeating a recent post
 - never add story details the facts don't state: no "today", "this week", "first we
   tried", "it got worse", no invented sequence of events. Opinions are fine; events
   must be exactly as stated in the facts.
-Then pick the one most likely to get replies, and say why in under 15 words.
+Then pick the one most likely to get people arguing in the replies, and say why in under 15 words.
 
 Answer ONLY JSON: {{"options": [{{"format": "...", "text": "..."}}, ...], "pick": 1, "why": "..."}}
 """
@@ -69,7 +84,10 @@ def main() -> None:
     hist = "\n".join(f"- {p['created'][:10]} | {p.get('metrics', '')} | {p['text'][:200]!r}" for p in posts) or "(none)"
     context = "\n\n".join(p.read_text(encoding="utf-8")
                           for p in sorted((replies.ROOT / "references").glob("*.local.md")))
-    txt = replies.claude(PROMPT.format(handle=handle, context=context, history=hist), replies.cfg()["claude"])
+    ex_file = replies.ROOT / "references" / "viral_examples.txt"
+    examples = ex_file.read_text(encoding="utf-8") if ex_file.exists() else "(none)"
+    txt = replies.claude(PROMPT.format(handle=handle, context=context, history=hist, examples=examples),
+                         replies.cfg()["claude"])
     try:
         out = json.loads(txt[txt.index("{"): txt.rindex("}") + 1])
     except ValueError:
@@ -78,7 +96,7 @@ def main() -> None:
     if not opts:
         raise SystemExit("no usable options")
     pick = out.get("pick") if isinstance(out.get("pick"), int) and 1 <= out["pick"] <= len(opts) else 1
-    msgs = [f"<b>📝 Today's post</b> · post at 21:00 IST, then answer every comment for 2 hours\n"
+    msgs = [f"<b>🌶 Today's post</b> · post at 21:00 IST, then answer every comment for 2 hours\n"
             f"👉 pick: option {pick} ({escape(out.get('why', ''))})"]
     for i, o in enumerate(opts, 1):
         msgs.append(f"<b>{'👉 ' if i == pick else ''}{i}. {escape(o.get('format', ''))}</b>\n\n<code>{escape(o['text'])}</code>")
