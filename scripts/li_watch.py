@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -25,6 +26,10 @@ import browser
 import outbox
 import replies
 from outbox import db, now
+
+# replies.py switches browser calls to the RESEARCH browser on import; LinkedIn lives
+# in the posting browser, so switch back.
+os.environ.pop("TWEETY_BROWSER", None)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
