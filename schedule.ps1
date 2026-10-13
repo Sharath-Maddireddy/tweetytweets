@@ -1,7 +1,8 @@
 # Registers every tweetytweets job on this Windows machine (run from the repo folder).
 # Each job goes through scripts\run.py, which checks sign-ins first and alerts Telegram
 # on any failure. Re-run this file after changing times. Times are local (set Windows to IST).
-$py = "$PWD\.venv\Scripts\python.exe"
+$ErrorActionPreference = "Stop"     # a failed register stops here, before its success line prints
+$py ="$PWD\.venv\Scripts\python.exe"
 function Job($name, $arg, $triggers) {
   $a = New-ScheduledTaskAction -Execute $py -Argument "scripts\run.py $arg" -WorkingDirectory $PWD
   Register-ScheduledTask -TaskName "tweetytweets $name" -Action $a -Trigger $triggers -Force | Out-Null
