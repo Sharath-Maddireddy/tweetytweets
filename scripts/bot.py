@@ -44,6 +44,10 @@ def li_identity_ok() -> bool:
     import browser
     import settings
     want = (settings.load().get("linkedin_name") or "").lower()
+    if not want:                     # not in config.json: use the repo's desktop config
+        import json
+        f = settings.ROOT / "config.desktop.json"
+        want = (json.loads(f.read_text(encoding="utf-8-sig")).get("linkedin_name") or "").lower() if f.exists() else ""
     if not want:
         return False
     t = browser.evaluate("https://www.linkedin.com/feed/", "document.body.innerText.slice(0, 1500)", settle=6) or ""
