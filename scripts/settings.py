@@ -93,7 +93,7 @@ def _load(required: bool) -> dict:
             raise SystemExit(2)
         return dict(DEFAULTS)
     try:
-        user = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        user = json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as err:
         raise SystemExit(f"config.json is not valid JSON: {err}")
     return _merged(DEFAULTS, user)
@@ -193,7 +193,7 @@ def save_limit(chars: int, premium: bool | None = None) -> dict:
     """Persist a MEASURED ceiling into config.json (used by post.py measure --save)."""
     cfg = {}
     if CONFIG_PATH.exists():
-        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
     cfg["max_chars"] = int(chars)
     cfg["max_chars_verified"] = True
     if premium is None:
