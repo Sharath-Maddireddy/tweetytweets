@@ -100,6 +100,10 @@ def record_run(job: str, ok: bool, detail: str = "") -> None:
 
 # ------------------------------------------------------------------ contacts
 
+RANK = {"not_sent": 0, "requested": 1, "dm_sent": 1, "public_reply_sent": 1, "accepted": 2,
+        "followup_sent": 3, "replied": 4}
+
+
 def upsert_contact(key: str, **fields) -> None:
     con = db()
     if not con.execute("select 1 from contacts where key=?", (key,)).fetchone():
@@ -111,9 +115,18 @@ def upsert_contact(key: str, **fields) -> None:
 def import_json() -> None:
     """One-time: bring the JSON trackers into the database."""
     li = ROOT / "drafts" / "linkedin_sent.json"
+    con = db()
+
+    def newer(key: str, status: str) -> bool:                  # never move a contact backwards
+        row = con.execute("select status from contacts where key=?", (key,)).fetchone()
+        return not row or RANK.get(status, 0) > RANK.get(row["status"], 0)
+
     for url, v in (json.loads(li.read_text()) if li.exists() else {}).items():
         r = v.get("result") or {}
         sent = r.get("sent") is True
+        st = "followup_sent" if v.get("followup_sent") else "accepted" if v.get("accepted") else "requested" if sent else "not_sent"
+        if not newer("li:" + url.rstrip("/").split("/in/")[-1], st):
+            continue
         upsert_contact("li:" + url.rstrip("/").split("/in/")[-1], channel="linkedin", name=v.get("name"),
                        brand=v.get("brand"), url=url,
                        status="followup_sent" if v.get("followup_sent") else "accepted" if v.get("accepted")
@@ -124,7 +137,7 @@ def import_json() -> None:
                        meta=json.dumps({"followup_draft": v.get("followup"), "title": v.get("title")}))
     x = ROOT / "drafts" / "leads.json"
     for k, v in (json.loads(x.read_text()) if x.exists() else {}).items():
-        if v.get("status") in ("dm_sent", "public_reply_sent"):
+        if v.get("status") in ("dm_sent", "public_reply_sent") and newer("x:" + k, v["status"]):
             upsert_contact("x:" + k, channel="x", name=v.get("handle", k), brand=v.get("company", ""),
                            url=f"https://x.com/{v.get('handle', k)}", status=v["status"],
                            sent_at=v.get("dm_sent_at") or v.get("contacted_at") or v.get("replied_at"))
