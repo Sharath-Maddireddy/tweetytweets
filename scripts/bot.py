@@ -31,7 +31,8 @@ from outbox import db, now, tg
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-DAILY_CAP = {"x_dm": 10, "li_connect": 10}
+DAILY_CAP = {"x_dm": 5, "li_connect": 8}
+PAUSE = outbox.ROOT / "drafts" / "PAUSED"            # /pause creates it, /resume removes it
 CHECK = "--check" in sys.argv          # test mode: go all the way to the filled dialog, send nothing
 GAP = (120, 240)                      # seconds between sends of the same kind
 
@@ -42,12 +43,7 @@ def owner_id() -> int:
 
 def li_identity_ok() -> bool:
     import browser
-    import settings
-    want = (settings.load().get("linkedin_name") or "").lower()
-    if not want:                     # not in config.json: use the repo's desktop config
-        import json
-        f = settings.ROOT / "config.desktop.json"
-        want = (json.loads(f.read_text(encoding="utf-8-sig")).get("linkedin_name") or "").lower() if f.exists() else ""
+    want = (outbox.setting("linkedin_name") or "").lower()
     if not want:
         return False
     t = browser.evaluate("https://www.linkedin.com/feed/", "document.body.innerText.slice(0, 1500)", settle=6) or ""
@@ -91,8 +87,21 @@ def due(con, kind: str) -> bool:
     return datetime.now(timezone.utc) - datetime.fromisoformat(last) >= timedelta(seconds=random.randint(*GAP))
 
 
+def auto_approve(con) -> None:
+    """Auto mode: pending actions approve themselves after the veto window."""
+    mins = outbox.setting("auto_send_after_min")
+    if mins is None:
+        return
+    cut = (datetime.now(timezone.utc) - timedelta(minutes=int(mins))).isoformat(timespec="seconds")
+    for row in con.execute("select id from outbox where status='pending' and created<=?", (cut,)).fetchall():
+        con.execute("update outbox set status='queued', decided=? where id=? and status='pending'", (now(), row["id"]))
+
+
 def work(con) -> None:
     """Send at most one queued action, if its kind is due."""
+    if PAUSE.exists():
+        return
+    auto_approve(con)
     for row in con.execute("select * from outbox where status='queued' order by decided").fetchall():
         if not due(con, row["kind"]):
             continue
@@ -109,6 +118,8 @@ def work(con) -> None:
             outbox.upsert_contact(row["contact_key"], **{field: now()})
             if row["kind"] == "li_connect":
                 outbox.upsert_contact(row["contact_key"], status="requested")
+            elif field == "sent_at":
+                outbox.upsert_contact(row["contact_key"], status="dm_sent")
         who = row["expected_name"] or row["target"]
         if CHECK:
             con.execute("update outbox set status='checked' where id=?", (row["id"],))
@@ -149,18 +160,35 @@ def on_callback(con, cq: dict) -> None:
         outbox.say("noted: they replied 🎉 no more nudges")
 
 
+def on_message(con, m: dict) -> None:
+    if int((m.get("from") or {}).get("id", 0)) != owner_id():
+        return
+    t = (m.get("text") or "").strip().lower()
+    if t == "/pause":
+        PAUSE.write_text(now())
+        outbox.say("⏸ paused: nothing will be sent until /resume")
+    elif t == "/resume":
+        PAUSE.unlink(missing_ok=True)
+        outbox.say("▶️ resumed")
+    elif t == "/status":
+        n = con.execute("select status, count(*) c from outbox group by 1").fetchall()
+        outbox.say(("⏸ PAUSED\n" if PAUSE.exists() else "") + "outbox: " + ", ".join(f"{r['status']} {r['c']}" for r in n))
+
+
 def main() -> None:
     con = db()
     offset = None
     print("bot running" + (" in CHECK mode (sends nothing)" if CHECK else ""), flush=True)
     while True:
         try:
-            upd = tg("getUpdates", timeout=25, allowed_updates=["callback_query"],
+            upd = tg("getUpdates", timeout=25, allowed_updates=["callback_query", "message"],
                      **({"offset": offset} if offset else {}))
             for u in upd.get("result", []):
                 offset = u["update_id"] + 1
                 if "callback_query" in u:
                     on_callback(con, u["callback_query"])
+                elif "message" in u:
+                    on_message(con, u["message"])
             work(con)
         except Exception as err:                              # network blips: wait and carry on
             print(f"{now()} {type(err).__name__}: {err}", flush=True)

@@ -284,6 +284,14 @@ def main() -> None:
         return
     if leads:
         replies.send(msgs, cfg["telegram"])
+        import outbox                                   # DMs: one tap in Telegram sends them
+        for l in leads:
+            if l.get("dm"):
+                outbox.upsert_contact(f"x:{l['handle'].lower()}", channel="x", name=l["handle"],
+                                      brand=l.get("company", ""), url=f"https://x.com/{l['handle']}", status="queued")
+                outbox.add("x_dm", l["handle"], l["dm"], contact_key=f"x:{l['handle'].lower()}",
+                           header=("public reply first, then tap ✅ tomorrow" if l.get("public_reply") else "")
+                                  + f"\n{l.get('role', '')} @ {l.get('company', '')}")
     for l in leads:
         known[l["handle"].lower()] = {**l, "surfaced_at": now.isoformat(), "status": "new"}
     for c in cands:                       # rejected ones too, so they aren't re-judged daily

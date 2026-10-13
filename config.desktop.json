@@ -92,5 +92,6 @@
     "bot_token": "",
     "chat_id": 1334246791
   },
-  "linkedin_name": "Maddireddy sharath"
+  "linkedin_name": "Maddireddy sharath",
+  "auto_send_after_min": 180
 }

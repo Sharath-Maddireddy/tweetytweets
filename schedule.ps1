@@ -16,6 +16,7 @@ Job "replies"    "replies"    ("08:30","20:25","23:30" | ForEach-Object { New-Sc
 Job "daily post" "daily_post" (New-ScheduledTaskTrigger -Daily -At 20:15)
 Job "li watch"   "li_watch"   (New-ScheduledTaskTrigger -Daily -At 10:30)
 Job "leads"      "leads"      (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 10:00)
+Job "li leads"   "li_leads"   (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 10:45)
 Job "refresh"    "refresh"    (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 10:00)
 Job "heartbeat"  "heartbeat"  (New-ScheduledTaskTrigger -Daily -At 22:45)
 

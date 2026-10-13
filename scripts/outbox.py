@@ -50,6 +50,17 @@ def db() -> sqlite3.Connection:
     return con
 
 
+def setting(key: str, default=None):
+    """config.json first, then the repo's config.desktop.json (so new keys arrive with git pull)."""
+    import settings
+    v = settings.load().get(key)
+    if v is None:
+        f = ROOT / "config.desktop.json"
+        if f.exists():
+            v = json.loads(f.read_text(encoding="utf-8-sig")).get(key)
+    return default if v is None else v
+
+
 # ------------------------------------------------------------------ telegram
 
 def tg_cfg() -> dict:
@@ -89,7 +100,10 @@ def add(kind: str, target: str, text: str, expected_name: str = "", contact_key:
     where = {"x_dm": f"X DM to @{target}", "li_connect": f"LinkedIn request to {expected_name or target}"}[kind]
     body = (f"{header}\n" if header else "") + f"<b>{escape(where)}</b>\n\n" + \
            (f"<code>{escape(text)}</code>" if text else "<i>(no note)</i>")
-    mid = say(body, [("✅ Send", f"send:{oid}"), ("✖️ Skip", f"skip:{oid}")])
+    mins = setting("auto_send_after_min")
+    if mins is not None:
+        body += f"\n\n⏱ auto-sends in {int(mins) // 60}h{int(mins) % 60:02d}m unless you tap Skip"
+    mid = say(body, [("✅ Send now", f"send:{oid}"), ("✖️ Skip", f"skip:{oid}")])
     con.execute("update outbox set tg_message_id=? where id=?", (mid, oid))
     return oid
 
@@ -100,7 +114,7 @@ def record_run(job: str, ok: bool, detail: str = "") -> None:
 
 # ------------------------------------------------------------------ contacts
 
-RANK = {"not_sent": 0, "requested": 1, "dm_sent": 1, "public_reply_sent": 1, "accepted": 2,
+RANK = {"not_sent": 0, "queued": 0, "requested": 1, "dm_sent": 1, "public_reply_sent": 1, "accepted": 2,
         "followup_sent": 3, "replied": 4}
 
 
@@ -180,4 +194,11 @@ if __name__ == "__main__":
         export_seed()
     elif cmd == "import-seed":
         import_seed()
+    elif cmd == "test":
+        # safe end-to-end test: a request to someone already PENDING. LinkedIn won't offer
+        # an invite, so the bot reports "not sent" and nothing reaches anyone.
+        row = db().execute("select * from contacts where channel='linkedin' and status='requested' limit 1").fetchone()
+        add("li_connect", row["url"], "", expected_name=row["name"],
+            header=f"🧪 TEST: {row['name']} is already pending, so this can't send anything. Tap ✅ to test the loop.")
+        print(f"test queued ({row['name']}); tap ✅ in Telegram")
     status()

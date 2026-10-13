@@ -25,6 +25,7 @@ JOBS = {
     "leads":      (["scripts/leads.py", "--funding"], "research"),
     "refresh":    (["scripts/refresh_accounts.py"], "research"),
     "li_watch":   (["scripts/li_watch.py"], "linkedin"),
+    "li_leads":   (["scripts/li_leads.py"], "linkedin"),
 }
 
 
