@@ -151,8 +151,33 @@ def status() -> None:
         print(f"outbox    {r['status']:16} {r['n']}")
 
 
+SEED = ROOT / "seed" / "outreach.json"     # one-time hand-over between machines via git
+
+
+def export_seed() -> None:
+    con = db()
+    rows = [dict(r) for r in con.execute("select * from contacts")]
+    SEED.parent.mkdir(exist_ok=True)
+    SEED.write_text(json.dumps(rows, indent=1, ensure_ascii=False), encoding="utf-8")
+    print(f"exported {len(rows)} contacts to {SEED}")
+
+
+def import_seed() -> None:
+    cols = {r[1] for r in db().execute("pragma table_info(contacts)")}
+    con = db()
+    for r in json.loads(SEED.read_text(encoding="utf-8")):
+        row = con.execute("select status from contacts where key=?", (r["key"],)).fetchone()
+        if row and RANK.get(row["status"], 0) >= RANK.get(r.get("status"), 0):
+            continue
+        upsert_contact(r["key"], **{k: v for k, v in r.items() if k in cols and k != "key"})
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
     if cmd == "import":
         import_json()
+    elif cmd == "export-seed":
+        export_seed()
+    elif cmd == "import-seed":
+        import_seed()
     status()
