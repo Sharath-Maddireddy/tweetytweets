@@ -150,7 +150,7 @@ async def follow(url: str) -> dict:
         await post._close(page)
 
 
-async def message(url: str, text: str, check: bool) -> dict:
+async def message(url: str, text: str, check: bool, expect: str = "") -> dict:
     """Message the person whose profile is open (works without connecting when their
     profile offers Message, e.g. Services pages). Refuses if the greeting's name differs."""
     page = await post._open(url)
@@ -158,12 +158,18 @@ async def message(url: str, text: str, check: bool) -> dict:
         await browser.settle_page(page, 7)
         await page.eval(FIND)
         name = json.loads(await page.eval(STATE))["name"].strip()
+        if expect and name != expect:
+            return {"sent": False, "error": f"profile is {name!r}, expected {expect!r}; refusing"}
         first = name.split()[0] if name else ""
         if not first or not text.startswith(f"Hi {first},"):
             return {"sent": False, "error": f"message doesn't greet {first or '?'}; refusing"}
         esc = re.escape(name).replace("/", "\\/")
-        if not await trusted_click(page, f"__top(/^Message {esc}$/i) || __top(/^Message$/)"):
-            return {"sent": False, "error": "no Message button"}
+        # the top card's Message link (no aria-label; sidebar ones carry other people's
+        # names); clicking it opens a chat window addressed to this profile
+        link = """__all('a').find(x => (x.innerText || '').trim() === 'Message' && !(x.getAttribute('aria-label') || '').trim()
+            && /messaging\\/compose\\/\\?profileUrn=/.test(x.getAttribute('href') || '') && x.getClientRects().length)"""
+        if not await trusted_click(page, link):
+            return {"sent": False, "error": "no Message link (not connected yet?)"}
         box_js = "__all('div.msg-form__contenteditable[contenteditable=\"true\"], div[role=\"textbox\"][contenteditable=\"true\"]').filter(e => e.getClientRects().length).pop()"
         for _ in range(15):
             await asyncio.sleep(0.8)
@@ -173,8 +179,8 @@ async def message(url: str, text: str, check: bool) -> dict:
         else:
             return {"sent": False, "error": "message box never appeared (may need Premium/InMail)"}
         # the open conversation must be with this person
-        hdr = await page.eval(r"""__all('.msg-overlay-bubble-header, .msg-overlay-conversation-bubble, [data-view-name*="message"]').map(e => e.innerText.slice(0, 200)).join(' ')""")
-        if first not in hdr:
+        hdr = await page.eval(r"""__all('.msg-overlay-bubble-header, .msg-overlay-conversation-bubble__header, [class*="bubble-header"]').filter(e => e.getClientRects().length).map(e => e.innerText.slice(0, 200)).join(' ')""")
+        if name not in hdr:
             return {"sent": False, "error": f"open conversation isn't with {name}; refusing", "header": hdr[:150]}
         if (await page.eval(f"(({box_js}) || {{}}).innerText || ''")).strip():
             return {"sent": False, "error": "message box already has text"}
