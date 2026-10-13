@@ -21,6 +21,6 @@ Job "heartbeat"  "heartbeat"  (New-ScheduledTaskTrigger -Daily -At 22:45)
 # the Telegram bot: starts at logon, restarts if it ever dies
 $a = New-ScheduledTaskAction -Execute $py -Argument "scripts\bot.py" -WorkingDirectory $PWD
 $s = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit 0
-Register-ScheduledTask -TaskName "tweetytweets bot" -Action $a -Trigger (New-ScheduledTaskTrigger -AtLogOn) -Settings $s -Force | Out-Null
+Register-ScheduledTask -TaskName "tweetytweets bot" -Action $a -Trigger (New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME") -Settings $s -Force | Out-Null
 Start-ScheduledTask -TaskName "tweetytweets bot"
 Write-Host "registered + started: bot"
