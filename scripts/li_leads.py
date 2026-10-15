@@ -8,6 +8,7 @@ the brand as current, then queue a connection request in the outbox. You tap ✅
 Telegram; the bot sends it (paced, capped). Notes are off: the free plan allows 3/month.
 
   python scripts/li_leads.py [--brands 12] [--days 35] [--dry-run]
+  python scripts/li_leads.py --agencies [--dry-run]   # influencer / social agencies in India
 """
 from __future__ import annotations
 
@@ -50,15 +51,68 @@ Search results per brand: {cands}
 Answer ONLY JSON: [{{"brand": "...", "name": "exact name as on the card", "url": "...", "title": "...",
 "why": "under 12 words"}}] (name/url null when nobody fits)."""
 
+AGENCY_QUERIES = ["influencer marketing agency founder", "influencer marketing agency co-founder India",
+                  "creator marketing agency founder", "head of influencer marketing agency",
+                  "social media agency founder influencer campaigns"]
+
+AGENCY_PICK = """From these LinkedIn search results, pick people who run or lead influencer / creator
+campaigns at an AGENCY in India (influencer marketing agency, social or digital agency that runs
+creator campaigns for brands). Priority: founder / co-founder / CEO / head of influencer of the agency.
+Reject: freelancers, creators or influencers themselves, interns, people at brands (not agencies),
+creator-tool startups, talent managers for a single creator, anyone outside India, anyone unclear.
+
+Already contacted (skip): {done}
+Search results: {cands}
+
+Answer ONLY JSON: [{{"agency": "agency name as on the card", "name": "exact name as on the card",
+"url": "...", "title": "...", "why": "under 12 words"}}]. Return [] if nobody fits."""
+
+
+def agencies(a, con) -> None:
+    done = sorted({r["brand"] for r in con.execute("select brand from contacts where brand is not null")})
+    urls = ["https://www.linkedin.com/search/results/people/?keywords=" + urllib.parse.quote(q)
+            for q in AGENCY_QUERIES]
+    cands = [c for r in browser.scrape_many(urls, SEARCH_JS, settle=9) for c in json.loads(r or "[]")]
+    cands = list({c["url"]: c for c in cands}.values())
+    txt = replies.claude(AGENCY_PICK.format(done=json.dumps(done), cands=json.dumps(cands, ensure_ascii=False)),
+                         replies.cfg()["claude"])
+    picks = json.loads(txt[txt.index("["): txt.rindex("]") + 1])
+    seen, queued = set(), 0
+    for p in picks:
+        ag = p.get("agency") or ""
+        if not p.get("url") or not p.get("name") or not ag or ag.lower() in seen:
+            continue                                 # one person per agency
+        vanity = p["url"].rstrip("/").split("/in/")[-1].split("/")[0]
+        key = f"li:{vanity}"
+        if con.execute("select 1 from contacts where key=?", (key,)).fetchone():
+            continue
+        ok, _ = li_watch.experience(vanity, ag)
+        if not ok:
+            print(f"skip {p['name']} ({ag}): agency not current in Experience"); continue
+        seen.add(ag.lower())
+        print(f"queue {p['name']} · {p['title']} · {ag}")
+        if a.dry_run:
+            continue
+        outbox.upsert_contact(key, channel="linkedin", name=p["name"], brand=ag,
+                              url=f"https://www.linkedin.com/in/{vanity}/", status="queued",
+                              meta=json.dumps({"title": p["title"], "type": "agency"}))
+        outbox.add("li_connect", f"https://www.linkedin.com/in/{vanity}/", "", expected_name=p["name"],
+                   contact_key=key, header=f"🏢 Agency: {ag}\n{p['title']} · role re-checked ✓ · {p['why']}")
+        queued += 1
+    print(f"queued {queued} agency requests for your ✅")
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--brands", type=int, default=12)
     ap.add_argument("--days", type=int, default=35, help="raised within this many days")
+    ap.add_argument("--agencies", action="store_true", help="find agency people instead of funded brands")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     con = outbox.db()
+    if a.agencies:
+        return agencies(a, con)
     done = {r["brand"].lower() for r in con.execute("select brand from contacts where brand is not null")}
     brands = [b for b in funding.recent(a.days)
               if b["sector"] and any(k in b["sector"] for k in ("D2C", "QSR", "F&B", "Food", "Beauty"))
