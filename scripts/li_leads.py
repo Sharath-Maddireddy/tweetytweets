@@ -7,7 +7,7 @@ marketing / creators AT that brand (else a founder), re-check their Experience s
 the brand as current, then queue a connection request in the outbox. You tap ✅ in
 Telegram; the bot sends it (paced, capped). Notes are off: the free plan allows 3/month.
 
-  python scripts/li_leads.py [--brands 12] [--dry-run]
+  python scripts/li_leads.py [--brands 12] [--days 35] [--dry-run]
 """
 from __future__ import annotations
 
@@ -55,11 +55,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--brands", type=int, default=12)
+    ap.add_argument("--days", type=int, default=35, help="raised within this many days")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     con = outbox.db()
     done = {r["brand"].lower() for r in con.execute("select brand from contacts where brand is not null")}
-    brands = [b for b in funding.recent(35)
+    brands = [b for b in funding.recent(a.days)
               if b["sector"] and any(k in b["sector"] for k in ("D2C", "QSR", "F&B", "Food", "Beauty"))
               and b["name"].lower() not in done][:a.brands]
     if not brands:
