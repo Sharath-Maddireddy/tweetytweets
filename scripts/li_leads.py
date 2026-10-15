@@ -9,6 +9,7 @@ Telegram; the bot sends it (paced, capped). Notes are off: the free plan allows 
 
   python scripts/li_leads.py [--brands 12] [--days 35] [--dry-run]
   python scripts/li_leads.py --agencies [--dry-run]   # influencer / social agencies in India
+  python scripts/li_leads.py --agencies --from seed/agencies.txt   # one person at each listed agency
 """
 from __future__ import annotations
 
@@ -57,7 +58,8 @@ AGENCY_QUERIES = ["influencer marketing agency founder", "influencer marketing a
 
 AGENCY_PICK = """From these LinkedIn search results, pick people who run or lead influencer / creator
 campaigns at an AGENCY in India (influencer marketing agency, social or digital agency that runs
-creator campaigns for brands). Priority: founder / co-founder / CEO / head of influencer of the agency.
+creator campaigns for brands). Priority: head of influencer / creator partnerships / social at bigger agencies, founder / co-founder /
+CEO at small ones. At most one person per agency.
 Reject: freelancers, creators or influencers themselves, interns, people at brands (not agencies),
 creator-tool startups, talent managers for a single creator, anyone outside India, anyone unclear.
 
@@ -70,8 +72,12 @@ Answer ONLY JSON: [{{"agency": "agency name as on the card", "name": "exact name
 
 def agencies(a, con) -> None:
     done = sorted({r["brand"] for r in con.execute("select brand from contacts where brand is not null")})
+    queries = AGENCY_QUERIES
+    if a.from_:                                      # named agencies: search people at each one
+        names = [l.strip() for l in open(a.from_, encoding="utf-8") if l.strip() and not l.startswith("#")]
+        queries = [f"{n} influencer" for n in names if n.lower() not in {d.lower() for d in done}]
     urls = ["https://www.linkedin.com/search/results/people/?keywords=" + urllib.parse.quote(q)
-            for q in AGENCY_QUERIES]
+            for q in queries]
     cands = [c for r in browser.scrape_many(urls, SEARCH_JS, settle=9) for c in json.loads(r or "[]")]
     cands = list({c["url"]: c for c in cands}.values())
     txt = replies.claude(AGENCY_PICK.format(done=json.dumps(done), cands=json.dumps(cands, ensure_ascii=False)),
@@ -108,6 +114,7 @@ def main() -> None:
     ap.add_argument("--brands", type=int, default=12)
     ap.add_argument("--days", type=int, default=35, help="raised within this many days")
     ap.add_argument("--agencies", action="store_true", help="find agency people instead of funded brands")
+    ap.add_argument("--from", dest="from_", help="with --agencies: file of agency names, one per line")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     con = outbox.db()

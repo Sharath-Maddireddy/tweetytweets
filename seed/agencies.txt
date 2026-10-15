@@ -1,0 +1,34 @@
+# Influencer / social agencies in India to prospect (source: Qoruz top-100 list, Oct 2026).
+# One per line. li_leads.py --agencies --from seed/agencies.txt finds one person at each.
+Chtrbox
+GryNow
+Idiotic Media
+My Haul Store
+Vavo Digital
+SocioClout
+Voxxy Media
+Thribe Creators
+Zaggle Media
+Findbusy
+Pokeify
+Creativefuel
+Sociowash
+FCB Kinnect
+Social Beat
+Collective Artists Network
+FoxyMoron
+Upprcas3 Elements
+Red Baron
+Hashtag Orange
+Poised Media
+YAAP
+Nothing Else Matters
+Paperclip & Co
+The SAP Media
+Silly Pixel Studio
+PAD Integrated Marketing
+WhiteVox
+Bang In The Middle
+Tonic Worldwide
+Ethinos
+TING
