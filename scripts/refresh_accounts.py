@@ -54,9 +54,9 @@ Who he is and what he posts about:
 Candidates (JSON). "why" says how each was found, "sample" is one of their posts:
 {cands}
 
-Pick the ones whose followers are his audience: AI builders, founders, indie
-hackers, people working with coding agents, creator-economy / influencer-marketing
-operators. Reject: crypto/memecoin/trading, engagement-bait or giveaway farms,
+Pick the ones whose followers are his audience: brand marketers, D2C founders,
+agency founders and operators, growth / performance marketers, and AI builders.
+Not creator coaches or creator-side tools: his customers are brands and agencies. Reject: crypto/memecoin/trading, engagement-bait or giveaway farms,
 politics, news aggregators, brand accounts, anything off-topic.
 Pick at most {max_add}. Prefer people replying to him (mutuals count most).
 

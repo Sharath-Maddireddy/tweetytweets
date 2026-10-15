@@ -31,9 +31,10 @@
   "x_queries": [
     "AI agents",
     "build in public",
-    "creator economy",
+    "influencer marketing",
     "Claude Code",
-    "indie hacker India"
+    "D2C India",
+    "marketing agency"
   ],
   "feeds": {
     "hn-frontpage": "https://hnrss.org/frontpage?points=150",
@@ -74,12 +75,14 @@
       "ishanagarwal24",
       "jappleby",
       "petergyang",
-      "colinandsamir",
-      "jayclouse",
-      "nathanbarry",
       "starter_story",
       "A1fiedickens15",
-      "joshsuggss"
+      "joshsuggss",
+      "danyay",
+      "LLMJunky",
+      "tr1ckastley",
+      "carlmonkft",
+      "iamarnob6543"
     ],
     "queries": [],
     "max_age_min": 120,
