@@ -86,7 +86,7 @@ async def run(url: str, note: str, check: bool, name: str = "") -> dict:
         await browser.settle_page(page, 8)
         await page.eval(FIND)
         dlg = await page.eval(r"""__all('[role="dialog"]').map(d => d.innerText).join(' ')""")
-        if name not in dlg:
+        if name.lower() not in dlg.lower():
             return {"sent": False, "error": f"invite dialog isn't for {name} (pending, connected, or invites off)",
                     "dialog": dlg[:160]}
         used_note = False
@@ -114,7 +114,7 @@ async def run(url: str, note: str, check: bool, name: str = "") -> dict:
     finally:
         await post._close(page)
     sent = await browser._eval_new_tab("https://www.linkedin.com/mynetwork/invitation-manager/sent/", "document.body.innerText", 8) or ""
-    return {"sent": name in sent or "unverified", "with_note": used_note, "name": name}
+    return {"sent": name.lower() in sent.lower() or "unverified", "with_note": used_note, "name": name}
 
 
 async def trusted_click(page, el_js: str) -> bool:
