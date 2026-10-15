@@ -3,8 +3,15 @@
 Only claim things listed here or in content-strategy.local.md. Update this file as
 things ship; the daily post drafter reads it.
 
+## Positioning (from Oct 15, 2026): what Creonnect is now
+- Creonnect helps BRANDS and AGENCIES run influencer / creator campaigns at scale with
+  Creo Intelligence (AI). Focus is the brand and agency side, not tools for creators.
+- Pre-seed raised (announced Oct 15, 2026). Amount not public in posts; never state a number.
+- 7 months from an idea on a whiteboard to funded.
+
 ## About Sharath
-- 22, cofounder of Creonnect, Hyderabad. Builds with AI coding agents.
+- Cofounder of Creonnect, Hyderabad. Builds with AI coding agents; grinds on it every night.
+- He and his cofounder were online friends for 5 years before starting Creonnect together.
 - Runs many tasks in parallel in git worktrees (48 worktrees of the Creonnect repo; 28 active in one week, early Oct).
 
 ## What Creonnect has shipped recently (Sept-Oct 2026)

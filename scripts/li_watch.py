@@ -54,8 +54,8 @@ Facts about Creonnect (claim nothing else; no customer numbers exist):
 
 Rules: start "Hi {first},", thank them for connecting, congratulate the raise only if it's
 listed above, mention one specific thing from their experience that relates to creators or
-marketing, one line on Creonnect (AI that analyses Instagram creators' engagement, comments
-and audience fit so brands pick the right ones), ask for a 15-min call. Under 350 chars,
+marketing, one line on Creonnect (helps brands and agencies run creator campaigns at scale
+with AI: right creators, judged on real engagement, campaigns without spreadsheets), ask for a 15-min call. Under 350 chars,
 warm, no em dashes, no hype. Answer with only the message text."""
 
 NUDGE = """Write a short, friendly follow-up from Sharath (cofounder of Creonnect) to {name} at

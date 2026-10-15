@@ -41,8 +41,9 @@ Posts that went viral in his niche (structure only, never copy wording or claims
 
 STYLE (he asked for this explicitly): SPICY TAKES. Strong, defensible opinions about
 industry practices that a real share of his audience will disagree with and reply to.
-Topics he owns: influencer / creator marketing in India, follower counts and vanity
-metrics, how brands pick creators, the creator economy, building with AI agents.
+Topics he owns: how brands and agencies run influencer campaigns (spreadsheets, DMs,
+guesswork, follower counts, vanity metrics), creator marketing in India, building
+a startup with AI agents. Creonnect now serves brands and agencies, not creators.
 Good: "Influencer marketing in India is mostly brands paying for followers they can't
 verify." / "Micro creators aren't cheaper. They're priced correctly. Big creators are
 overpriced." / "Vibe coding didn't kill software engineers. It killed the ones whose

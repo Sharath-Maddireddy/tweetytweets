@@ -4,9 +4,10 @@ Researched 2026-10-05: 89 top posts (last 30 days, 16 niche searches, min 300 li
 plus X's published ranking code (github.com/xai-org/x-algorithm, Oct 2026).
 
 ## Who's posting
-22, cofounder of Creonnect (Hyderabad): AI that analyses Instagram creators and
-matches brands to creators. Builds with AI coding agents. Audience: AI builders /
-founders, plus creators and brands.
+Cofounder of Creonnect (Hyderabad). Creonnect helps BRANDS and AGENCIES run
+influencer / creator campaigns at scale with Creo Intelligence (AI). Pre-seed raised
+Oct 2026. Audience: brand marketers, agency founders/managers, D2C founders, plus
+AI builders. (Since Oct 15, 2026 the focus is brands and agencies, not creators.)
 
 ## What the ranking rewards (from the code, not folklore)
 - Score = weighted sum of predicted actions. Highest positives: copy-link share 20,
@@ -32,12 +33,12 @@ founders, plus creators and brands.
    influencers to build Cal AI's creator program." Real ops detail, real number.
 5. "I built X" with visible output: "i built a skill to un-slop AI-looking apps" (321k).
 
-## Pillars (agreed)
-- Creator data insights from Creonnect (~35%): aggregated only, never a named
-  creator's private data. Every number must come from real Creonnect analysis.
-- Building Creonnect in public (~30%): decisions, numbers, mistakes.
-- Building with AI agents (~25%): real workflow, what works, what breaks.
-- Observations on creators vs brands (~10%): short, sharp, opinionated.
+## Pillars (updated Oct 15, 2026)
+- How campaigns really run (~35%): spreadsheets, DMs, guesswork, follower counts,
+  agency vs in-house. Spicy, defensible takes for brand and agency people.
+- Building Creonnect in public (~30%): the raise, decisions, what we ship, mistakes.
+- Building with AI agents (~25%): real workflow, what works and breaks.
+- Generic / relatable (~10%): broad-appeal one-liners.
 
 ## NEVER
 - "Bookmark this 🔖 🧵👇", "repost for others", follow/comment-for-DM bait.

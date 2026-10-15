@@ -90,9 +90,9 @@ About him and Creonnect:
 </context>
 
 What Creonnect offers brands, use ONLY these facts:
-- AI that analyses Instagram creators (engagement quality, comments, audience fit,
-  consistency of recent posts) to find the right creators for a brand campaign.
-- Brands run campaigns (public or invite-only) and creators apply.
+- Helps brands and agencies run influencer / creator campaigns at scale with Creo
+  Intelligence (AI): finding the right creators, running campaigns (public or
+  invite-only, creators apply), and judging creators on real engagement, not followers.
 - Right now brands are onboarded personally by the team. The offer is a 15-minute demo call.
 - No customer numbers or results exist yet: never claim any.
 
@@ -113,9 +113,10 @@ post to reply to, so set "public_reply" to "" for them.
 {cands}
 
 A lead QUALIFIES only if they are a decision-maker (founder, marketing / growth /
-brand / influencer lead) at a brand, or the brand account itself, that runs or
-would run Instagram creator campaigns, preferably in India.
-REJECT: investors, VCs, angel networks, influencer or marketing agencies, creator platforms / tools (competitors),
+brand / influencer lead) at a brand that runs or would run Instagram creator
+campaigns, OR at an influencer / creator marketing AGENCY (they run campaigns for
+many brands: a great fit), preferably in India.
+REJECT: investors, VCs, angel networks, creator platforms / SaaS tools (competitors),
 creators and influencers themselves, recruiters, job boards, crypto/web3, news,
 huge brands that buy through agencies, anyone whose fit is a guess.
 
