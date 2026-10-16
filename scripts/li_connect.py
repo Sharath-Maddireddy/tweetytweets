@@ -188,7 +188,7 @@ async def message(url: str, text: str, check: bool, expect: str = "", allow_thre
             return {"sent": False, "error": f"compose pane isn't addressed to {name}; refusing", "pane": pane[:150]}
         n_msgs = await page.eval("__all('.msg-s-event-listitem__body').filter(e => e.getClientRects().length).length")
         listed = await page.eval(f"""__all('.msg-conversation-listitem, .msg-conversation-card, li.msg-conversations-container__convo-item')
-            .some(e => e.innerText.toLowerCase().includes({json.dumps(name.lower())}))""")
+            .some(e => e.innerText.toLowerCase().includes({json.dumps(name.lower())}) && !/draft/i.test(e.innerText))""")
         if (n_msgs or listed) and not allow_thread:         # never double-message a follow-up
             return {"sent": False, "error": f"conversation with {name} already exists; refusing"}
         draft = (await page.eval(f"(({box_js}) || {{}}).innerText || ''")).strip()
@@ -197,13 +197,17 @@ async def message(url: str, text: str, check: bool, expect: str = "", allow_thre
         if not draft:                                       # a --check run leaves the approved text as a draft
             await page.eval(f"({box_js}).focus()")
             await page.send("Input.insertText", text=text)
+            for t in ("keyDown", "keyUp"):                  # a real keystroke so LinkedIn's editor registers the text
+                await page.send("Input.dispatchKeyEvent", type=t, key="End", code="End", windowsVirtualKeyCode=35)
             await asyncio.sleep(1)
         typed = await page.eval(f"(({box_js}) || {{}}).innerText || ''")
         if " ".join(typed.split()) != " ".join(text.split()):
             return {"sent": False, "error": "typed text doesn't match approved text", "typed": typed[:120]}
+        send_js = "__all('button.msg-form__send-button').filter(b => b.getClientRects().length && !b.disabled).pop()"
+        if not await page.eval(f"!!({send_js})"):
+            return {"sent": False, "error": "Send button still disabled after typing"}
         if check:
-            return {"sent": False, "check": "message typed, nothing sent", "to": name}
-        send_js = "__all('button.msg-form__send-button, button[type=\"submit\"]').filter(b => b.getClientRects().length && !b.disabled).pop()"
+            return {"sent": False, "check": "message typed, Send enabled, nothing sent", "to": name}
         if not await trusted_click(page, send_js):
             return {"sent": False, "error": "send button missing or disabled"}
         probe = json.dumps(text[:40])
