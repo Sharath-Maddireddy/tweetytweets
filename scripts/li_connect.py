@@ -150,7 +150,7 @@ async def follow(url: str) -> dict:
         await post._close(page)
 
 
-async def message(url: str, text: str, check: bool, expect: str = "") -> dict:
+async def message(url: str, text: str, check: bool, expect: str = "", allow_thread: bool = False) -> dict:
     """Message the person whose profile is open (works without connecting when their
     profile offers Message, e.g. Services pages). Refuses if the greeting's name differs."""
     page = await post._open(url)
@@ -158,7 +158,7 @@ async def message(url: str, text: str, check: bool, expect: str = "") -> dict:
         await browser.settle_page(page, 7)
         await page.eval(FIND)
         name = json.loads(await page.eval(STATE))["name"].strip()
-        if expect and name != expect:
+        if expect and name.lower() != expect.lower():
             return {"sent": False, "error": f"profile is {name!r}, expected {expect!r}; refusing"}
         first = name.split()[0] if name else ""
         if not first or not text.startswith(f"Hi {first},"):
@@ -180,13 +180,18 @@ async def message(url: str, text: str, check: bool, expect: str = "") -> dict:
             return {"sent": False, "error": "message box never appeared (may need Premium/InMail)"}
         # the open conversation must be with this person
         hdr = await page.eval(r"""__all('.msg-overlay-bubble-header, .msg-overlay-conversation-bubble__header, [class*="bubble-header"]').filter(e => e.getClientRects().length).map(e => e.innerText.slice(0, 200)).join(' ')""")
-        if name not in hdr:
+        if name.lower() not in hdr.lower():
             return {"sent": False, "error": f"open conversation isn't with {name}; refusing", "header": hdr[:150]}
-        if (await page.eval(f"(({box_js}) || {{}}).innerText || ''")).strip():
-            return {"sent": False, "error": "message box already has text"}
-        await page.eval(f"({box_js}).focus()")
-        await page.send("Input.insertText", text=text)
-        await asyncio.sleep(1)
+        n_msgs = await page.eval("__all('.msg-s-event-listitem__body').filter(e => e.getClientRects().length).length")
+        if n_msgs and not allow_thread:                     # never double-message a follow-up
+            return {"sent": False, "error": f"conversation already has {n_msgs} message(s); refusing"}
+        draft = (await page.eval(f"(({box_js}) || {{}}).innerText || ''")).strip()
+        if draft and " ".join(draft.split()) != " ".join(text.split()):
+            return {"sent": False, "error": "message box already has other text"}
+        if not draft:                                       # a --check run leaves the approved text as a draft
+            await page.eval(f"({box_js}).focus()")
+            await page.send("Input.insertText", text=text)
+            await asyncio.sleep(1)
         typed = await page.eval(f"(({box_js}) || {{}}).innerText || ''")
         if " ".join(typed.split()) != " ".join(text.split()):
             return {"sent": False, "error": "typed text doesn't match approved text", "typed": typed[:120]}
