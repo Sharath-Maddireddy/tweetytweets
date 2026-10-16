@@ -163,28 +163,34 @@ async def message(url: str, text: str, check: bool, expect: str = "", allow_thre
         first = name.split()[0] if name else ""
         if not first or not text.startswith(f"Hi {first},"):
             return {"sent": False, "error": f"message doesn't greet {first or '?'}; refusing"}
-        esc = re.escape(name).replace("/", "\\/")
-        # the top card's Message link (no aria-label; sidebar ones carry other people's
-        # names); clicking it opens a chat window addressed to this profile
-        link = """__all('a').find(x => (x.innerText || '').trim() === 'Message' && !(x.getAttribute('aria-label') || '').trim()
-            && /messaging\\/compose\\/\\?profileUrn=/.test(x.getAttribute('href') || '') && x.getClientRects().length)"""
-        if not await trusted_click(page, link):
+        # the top card's Message link (no aria-label; sidebar ones carry other people's names).
+        # Open its compose URL as a full page: the overlay chat doesn't render reliably.
+        href = await page.eval("""(__all('a').find(x => (x.innerText || '').trim() === 'Message'
+            && !(x.getAttribute('aria-label') || '').trim()
+            && /messaging\\/compose\\/\\?profileUrn=/.test(x.getAttribute('href') || '') && x.getClientRects().length) || {}).href || ''""")
+        if not href:
             return {"sent": False, "error": "no Message link (not connected yet?)"}
-        box_js = "__all('div.msg-form__contenteditable[contenteditable=\"true\"], div[role=\"textbox\"][contenteditable=\"true\"]').filter(e => e.getClientRects().length).pop()"
+        await page.send("Page.navigate", url=href.replace("&interop=msgOverlay", ""))
+        await browser.settle_page(page, 8)
+        box_js = "__all('div.msg-form__contenteditable[contenteditable=\"true\"]').filter(e => e.getClientRects().length).pop()"
         for _ in range(15):
-            await asyncio.sleep(0.8)
             await page.eval(FIND)
             if await page.eval(f"!!({box_js})"):
                 break
+            await asyncio.sleep(0.8)
         else:
             return {"sent": False, "error": "message box never appeared (may need Premium/InMail)"}
-        # the open conversation must be with this person
-        hdr = await page.eval(r"""__all('.msg-overlay-bubble-header, .msg-overlay-conversation-bubble__header, [class*="bubble-header"]').filter(e => e.getClientRects().length).map(e => e.innerText.slice(0, 200)).join(' ')""")
-        if name.lower() not in hdr.lower():
-            return {"sent": False, "error": f"open conversation isn't with {name}; refusing", "header": hdr[:150]}
+        # the compose pane must be addressed to this one person, a 1st-degree connection
+        pane = await page.eval(f"""(() => {{ let p = {box_js}; for (let i = 0; i < 12 && p.parentElement; i++) {{
+            p = p.parentElement; if (p.innerText.length > 300) break; }} return p.innerText; }})()""")
+        to = pane.split("Show suggested recipients")[0]
+        if name.lower() not in to.lower() or "1st degree connection" not in pane:
+            return {"sent": False, "error": f"compose pane isn't addressed to {name}; refusing", "pane": pane[:150]}
         n_msgs = await page.eval("__all('.msg-s-event-listitem__body').filter(e => e.getClientRects().length).length")
-        if n_msgs and not allow_thread:                     # never double-message a follow-up
-            return {"sent": False, "error": f"conversation already has {n_msgs} message(s); refusing"}
+        listed = await page.eval(f"""__all('.msg-conversation-listitem, .msg-conversation-card, li.msg-conversations-container__convo-item')
+            .some(e => e.innerText.toLowerCase().includes({json.dumps(name.lower())}))""")
+        if (n_msgs or listed) and not allow_thread:         # never double-message a follow-up
+            return {"sent": False, "error": f"conversation with {name} already exists; refusing"}
         draft = (await page.eval(f"(({box_js}) || {{}}).innerText || ''")).strip()
         if draft and " ".join(draft.split()) != " ".join(text.split()):
             return {"sent": False, "error": "message box already has other text"}
