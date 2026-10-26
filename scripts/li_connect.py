@@ -186,17 +186,19 @@ async def message(url: str, text: str, check: bool, expect: str = "", allow_thre
         to = pane.split("Show suggested recipients")[0]
         if name.lower() not in to.lower() or (not allow_thread and "1st degree connection" not in pane):
             return {"sent": False, "error": f"compose pane isn't addressed to {name}; refusing", "pane": pane[:150]}
-        n_msgs = await page.eval("__all('.msg-s-event-listitem__body').filter(e => e.getClientRects().length).length")
+        n_msgs = await page.eval("__all('.msg-s-event-listitem, .msg-s-message-list__event').filter(e => e.getClientRects().length).length")
         listed = await page.eval(f"""__all('.msg-conversation-listitem, .msg-conversation-card, li.msg-conversations-container__convo-item')
             .some(e => e.innerText.toLowerCase().includes({json.dumps(name.lower())}) && !/draft/i.test(e.innerText))""")
         if (n_msgs or listed) and not allow_thread:         # never double-message a follow-up
             return {"sent": False, "error": f"conversation with {name} already exists; refusing"}
         if allow_thread:                                    # a nudge: only while the chat ends with our message
-            last = await page.eval(f"""(__all('.msg-conversation-listitem, .msg-conversation-card, li.msg-conversations-container__convo-item')
-                .map(e => e.innerText).find(t => t.toLowerCase().includes({json.dumps(name.lower())})) || '')""")
-            if "you:" not in last.lower():
-                return {"sent": False, "error": f"can't confirm {name} hasn't replied (last message isn't ours); refusing",
-                        "last": last[:150]}
+            import outbox
+            me = (outbox.setting("linkedin_name") or "").lower()
+            last = await page.eval(r"""(() => { const t = __all('.msg-s-message-list__event, .msg-s-event-listitem')
+                .filter(e => e.getClientRects().length).map(e => e.innerText).join('\n');
+                const m = [...t.matchAll(/([^\n|]+?) sent the following messages? at/g)]; return m.length ? m[m.length - 1][1].trim() : ''; })()""")
+            if not me or last.lower() != me:
+                return {"sent": False, "error": f"last message in the chat is from {last or 'unknown'}, not us; refusing"}
         draft = (await page.eval(f"(({box_js}) || {{}}).innerText || ''")).strip()
         if draft and " ".join(draft.split()) != " ".join(text.split()):
             return {"sent": False, "error": "message box already has other text"}
