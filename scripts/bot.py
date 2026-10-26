@@ -19,9 +19,11 @@ from __future__ import annotations
 import asyncio
 import json
 import random
+import socket
 import sys
 import time
 import traceback
+import urllib.error
 from datetime import datetime, timedelta, timezone
 from html import escape
 
@@ -35,6 +37,7 @@ DAILY_CAP = {"x_dm": 5, "li_connect": 8}
 PAUSE = outbox.ROOT / "drafts" / "PAUSED"            # /pause creates it, /resume removes it
 CHECK = "--check" in sys.argv          # test mode: go all the way to the filled dialog, send nothing
 GAP = (120, 240)                      # seconds between sends of the same kind
+LOCK_PORT = 47219                     # held while a bot runs: a second copy on this machine exits
 
 
 def owner_id() -> int:
@@ -175,7 +178,26 @@ def on_message(con, m: dict) -> None:
         outbox.say(("⏸ PAUSED\n" if PAUSE.exists() else "") + "outbox: " + ", ".join(f"{r['status']} {r['c']}" for r in n))
 
 
+def single_instance() -> socket.socket | None:
+    """Bind a local port as a lock; the OS frees it when the process dies, so no stale locks."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if sys.platform.startswith("win"):
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    try:
+        s.bind(("127.0.0.1", LOCK_PORT))
+    except OSError:
+        s.close()
+        return None
+    return s
+
+
 def main() -> None:
+    lock = single_instance()
+    if lock is None:
+        print("bot is already running on this machine (the scheduled task); not starting a second one.\n"
+              "To restart it: Stop-ScheduledTask / Start-ScheduledTask -TaskName \"tweetytweets bot\"",
+              flush=True)
+        return
     con = db()
     offset = None
     print("bot running" + (" in CHECK mode (sends nothing)" if CHECK else ""), flush=True)
@@ -190,6 +212,15 @@ def main() -> None:
                 elif "message" in u:
                     on_message(con, u["message"])
             work(con)
+        except urllib.error.HTTPError as err:
+            if err.code != 409:
+                print(f"{now()} HTTPError: {err}", flush=True)
+                time.sleep(10)
+                continue
+            # another machine is polling this bot token; only one bot may run per token
+            print(f"{now()} Conflict: another bot is polling this Telegram token (another machine?). "
+                  "Stop the bot there; retrying in 60s.", flush=True)
+            time.sleep(60)
         except Exception as err:                              # network blips: wait and carry on
             print(f"{now()} {type(err).__name__}: {err}", flush=True)
             time.sleep(10)
