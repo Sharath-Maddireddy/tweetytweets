@@ -184,13 +184,19 @@ async def message(url: str, text: str, check: bool, expect: str = "", allow_thre
         pane = await page.eval(f"""(() => {{ let p = {box_js}; for (let i = 0; i < 12 && p.parentElement; i++) {{
             p = p.parentElement; if (p.innerText.length > 300) break; }} return p.innerText; }})()""")
         to = pane.split("Show suggested recipients")[0]
-        if name.lower() not in to.lower() or "1st degree connection" not in pane:
+        if name.lower() not in to.lower() or (not allow_thread and "1st degree connection" not in pane):
             return {"sent": False, "error": f"compose pane isn't addressed to {name}; refusing", "pane": pane[:150]}
         n_msgs = await page.eval("__all('.msg-s-event-listitem__body').filter(e => e.getClientRects().length).length")
         listed = await page.eval(f"""__all('.msg-conversation-listitem, .msg-conversation-card, li.msg-conversations-container__convo-item')
             .some(e => e.innerText.toLowerCase().includes({json.dumps(name.lower())}) && !/draft/i.test(e.innerText))""")
         if (n_msgs or listed) and not allow_thread:         # never double-message a follow-up
             return {"sent": False, "error": f"conversation with {name} already exists; refusing"}
+        if allow_thread:                                    # a nudge: only while the chat ends with our message
+            last = await page.eval(f"""(__all('.msg-conversation-listitem, .msg-conversation-card, li.msg-conversations-container__convo-item')
+                .map(e => e.innerText).find(t => t.toLowerCase().includes({json.dumps(name.lower())})) || '')""")
+            if "you:" not in last.lower():
+                return {"sent": False, "error": f"can't confirm {name} hasn't replied (last message isn't ours); refusing",
+                        "last": last[:150]}
         draft = (await page.eval(f"(({box_js}) || {{}}).innerText || ''")).strip()
         if draft and " ".join(draft.split()) != " ".join(text.split()):
             return {"sent": False, "error": "message box already has other text"}

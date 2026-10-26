@@ -2,7 +2,7 @@
 """Outreach database + Telegram helpers shared by the bot, the watcher and the runner.
 
 drafts/outreach.db (sqlite, git-ignored) holds:
-  outbox    actions waiting for a ✅ tap in Telegram (x_dm, li_connect). The text is
+  outbox    actions waiting for a ✅ tap in Telegram (x_dm, li_connect, li_msg, li_nudge). The text is
             frozen when the row is added; a tap sends exactly that text.
   contacts  everyone contacted on any channel and where they are in the funnel.
   runs      job results, for failure alerts and the daily heartbeat.
@@ -92,12 +92,13 @@ def add(kind: str, target: str, text: str, expected_name: str = "", contact_key:
         header: str = "") -> str:
     """Queue an action and send it to Telegram with ✅ Send / Skip buttons."""
     from html import escape
-    assert kind in ("x_dm", "li_connect"), kind
+    assert kind in ("x_dm", "li_connect", "li_msg", "li_nudge"), kind
     oid = secrets.token_hex(4)
     con = db()
     con.execute("insert into outbox (id, kind, target, expected_name, text, created, contact_key) "
                 "values (?,?,?,?,?,?,?)", (oid, kind, target, expected_name, text, now(), contact_key))
-    where = {"x_dm": f"X DM to @{target}", "li_connect": f"LinkedIn request to {expected_name or target}"}[kind]
+    where = {"x_dm": f"X DM to @{target}", "li_connect": f"LinkedIn request to {expected_name or target}",
+             "li_msg": f"LinkedIn message to {expected_name}", "li_nudge": f"LinkedIn nudge to {expected_name}"}[kind]
     body = (f"{header}\n" if header else "") + f"<b>{escape(where)}</b>\n\n" + \
            (f"<code>{escape(text)}</code>" if text else "<i>(no note)</i>")
     mins = setting("auto_send_after_min")

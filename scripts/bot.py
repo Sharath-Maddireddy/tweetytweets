@@ -3,7 +3,7 @@
 two processes polling the same bot steal each other's updates.
 
 Buttons it handles:
-  send:<id> / skip:<id>   outbox actions (x_dm, li_connect), text frozen at queue time
+  send:<id> / skip:<id>   outbox actions (x_dm, li_connect, li_msg, li_nudge), text frozen at queue time
   fu:<rowid>              "I sent the LinkedIn follow-up" (stops it being re-drafted)
   rep:<rowid>             "they replied" (stops nudges)
 
@@ -33,7 +33,7 @@ from outbox import db, now, tg
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-DAILY_CAP = {"x_dm": 5, "li_connect": 8}
+DAILY_CAP = {"x_dm": 5, "li_connect": 8, "li_msg": 10, "li_nudge": 5}
 PAUSE = outbox.ROOT / "drafts" / "PAUSED"            # /pause creates it, /resume removes it
 CHECK = "--check" in sys.argv          # test mode: go all the way to the filled dialog, send nothing
 GAP = (120, 240)                      # seconds between sends of the same kind
@@ -70,6 +70,13 @@ def execute(row) -> dict:
             if not li_identity_ok():
                 return {"sent": False, "error": "LinkedIn isn't signed in as the configured linkedin_name"}
             r = asyncio.run(li_connect.run(row["target"], row["text"], CHECK, row["expected_name"]))
+            return {**r, "sent": True, "check_only": True} if CHECK and r.get("check") else r
+        if row["kind"] in ("li_msg", "li_nudge"):
+            import li_connect
+            if not li_identity_ok():
+                return {"sent": False, "error": "LinkedIn isn't signed in as the configured linkedin_name"}
+            r = asyncio.run(li_connect.message(row["target"], row["text"], CHECK, row["expected_name"],
+                                               allow_thread=row["kind"] == "li_nudge"))
             return {**r, "sent": True, "check_only": True} if CHECK and r.get("check") else r
         return {"sent": False, "error": f"unknown kind {row['kind']}"}
     except Exception as err:                                  # report, don't crash the bot
@@ -116,13 +123,17 @@ def work(con) -> None:
         con.execute("update outbox set status=?, sent_at=?, result=? where id=?",
                     ("sent" if ok else "failed", now(), json.dumps(r, ensure_ascii=False)[:2000], row["id"]))
         if ok and row["contact_key"] and not CHECK:
-            field = "nudged_at" if row["kind"] == "x_dm" and con.execute(
-                "select sent_at from contacts where key=?", (row["contact_key"],)).fetchone() else "sent_at"
-            outbox.upsert_contact(row["contact_key"], **{field: now()})
-            if row["kind"] == "li_connect":
-                outbox.upsert_contact(row["contact_key"], status="requested")
-            elif field == "sent_at":
-                outbox.upsert_contact(row["contact_key"], status="dm_sent")
+            key, kind = row["contact_key"], row["kind"]
+            if kind == "li_connect":
+                outbox.upsert_contact(key, status="requested", sent_at=now())
+            elif kind == "li_msg":
+                outbox.upsert_contact(key, status="followup_sent", followup_sent_at=now())
+            elif kind == "li_nudge":
+                outbox.upsert_contact(key, nudged_at=now())
+            elif (con.execute("select sent_at from contacts where key=?", (key,)).fetchone() or [None])[0]:
+                outbox.upsert_contact(key, nudged_at=now())        # x_dm to someone already DMed
+            else:
+                outbox.upsert_contact(key, status="dm_sent", sent_at=now())
         who = row["expected_name"] or row["target"]
         if CHECK:
             con.execute("update outbox set status='checked' where id=?", (row["id"],))

@@ -2,12 +2,11 @@
 """Daily: spot accepted LinkedIn requests, draft follow-ups, and nudge silent leads.
 
 - Accepted: matched by /in/<vanity> on your Connections page (one page load). The
-  person's current role at the brand is re-checked ("Present" in Experience), then a
-  follow-up is drafted and sent to Telegram to paste (LinkedIn messages can't be
-  automated: they hit a Premium upsell). Button: "✅ I sent it".
-- Silent 5 days after the follow-up (LinkedIn) or the DM (X): a short nudge is drafted.
-  X nudges go to the outbox with ✅ Send; LinkedIn nudges are to paste. Each also gets
-  a "they replied" button that stops further nudges. One nudge per person, ever.
+  person's current role at the brand is re-checked ("Present" in Experience), then the
+  follow-up goes to the outbox (✅ Send / Skip; auto-sends after the veto window).
+- Silent 5 days after the follow-up (LinkedIn) or the DM (X): a short nudge goes to the
+  outbox. A LinkedIn nudge only sends if the chat still ends with our message (no reply).
+  One nudge per person, ever.
 
   python scripts/li_watch.py            # needs LinkedIn signed in on the posting browser
   python scripts/li_watch.py --dry-run
@@ -40,37 +39,32 @@ LINKS_JS = r"""(async () => { for (let i = 0; i < 4; i++) { window.scrollBy(0, 2
   return JSON.stringify([...new Set([...document.querySelectorAll('main a[href*="/in/"]')]
     .map(a => a.href.split('?')[0].replace(/\/$/, '').split('/in/')[1]))]); })()"""
 
-FOLLOWUP = """Write a LinkedIn message from Sharath (22, cofounder of Creonnect) to {name}, who just
-accepted his connection request. Their current role (from their LinkedIn Experience):
-<experience>
-{experience}
-</experience>
-Their brand {brand}: {raise_info}
+# Follow-ups are a fixed template (the wording Sharath approved), not free-written drafts:
+# free drafts kept adding flattery about people's careers.
+PITCH_BRAND = ("At Creonnect we help brands and agencies run creator campaigns at scale with AI, picking creators "
+               "on real engagement instead of follower counts and spreadsheets. Open to a quick 15-min call?")
+PITCH_AGENCY = ("At Creonnect we help agencies run creator campaigns for their brand clients at scale with AI, "
+                "shortlisting creators on real engagement instead of follower counts and spreadsheets. "
+                "Open to a quick 15-min call?")
 
-Facts about Creonnect (claim nothing else; no customer numbers exist):
-<facts>
-{facts}
-</facts>
 
-Rules: start "Hi {first},", thank them for connecting, congratulate the raise only if it's
-listed above, mention one specific thing from their experience that relates to creators or
-marketing, one line on Creonnect (helps brands and agencies run creator campaigns at scale
-with AI: right creators, judged on real engagement, campaigns without spreadsheets), ask for a 15-min call. Under 350 chars,
-warm, no em dashes, no hype. Answer with only the message text."""
+def followup(first: str, brand: str, agency: bool) -> str:
+    if agency:
+        return f"Hi {first}, thanks for connecting! Saw you're building {brand}. " + PITCH_AGENCY
+    if raise_info(brand).startswith("raised"):
+        return f"Hi {first}, thanks for connecting, and congrats on the {brand} raise! " + PITCH_BRAND
+    return f"Hi {first}, thanks for connecting! Quick question: how does {brand} pick creators for campaigns today? " + PITCH_BRAND
+
 
 NUDGE = """Write a short, friendly follow-up from Sharath (cofounder of Creonnect) to {name} at
 {brand}. He messaged them {days} days ago and got no reply:
 <previous>
 {previous}
 </previous>
-One or two lines: no guilt-tripping, no "just bumping this", add one useful line or make the
-ask easier (e.g. a 10-min call or happy to share what we see for brands in their category).
+One or two lines: no guilt-tripping, no "just bumping this". Make the ask easier: a 10-min
+call, or a quick look at how Creo Intelligence would shortlist creators for their brand.
+Never offer data, reports, results or "what we're seeing": none exist yet.
 {greeting_rule} Under 220 chars, no em dashes. Answer with only the message text."""
-
-
-def facts() -> str:
-    p = outbox.ROOT / "references" / "facts.local.md"
-    return p.read_text(encoding="utf-8") if p.exists() else ""
 
 
 def raise_info(brand: str) -> str:
@@ -114,20 +108,14 @@ def accepted(dry: bool) -> None:
             if not dry:
                 outbox.upsert_contact(c["key"], status="accepted", accepted_at=now())
             continue
-        msg = replies.claude(FOLLOWUP.format(name=c["name"], first=first, experience=exp, brand=c["brand"],
-                                             raise_info=raise_info(c["brand"]), facts=facts()),
-                             replies.cfg()["claude"]).strip()
-        if not msg.startswith(f"Hi {first},"):
-            msg = f"Hi {first}, " + msg
+        agency = json.loads(c["meta"] or "{}").get("type") == "agency"
+        msg = followup(first, c["brand"] or "your brand", agency)
         print(f"accepted: {c['name']} ({c['brand']})\n  {msg}")
         if dry:
             continue
-        outbox.upsert_contact(c["key"], status="accepted", accepted_at=now(),
-                              meta=json.dumps({"followup_draft": msg}))
-        outbox.say(f"💼 <b>{escape(c['name'])}</b> accepted · {escape(c['brand'] or '')} (role re-checked ✓)\n"
-                   f"Profile → Message (close the Premium pop-up) → paste:\n\n<code>{escape(msg)}</code>\n\n"
-                   f"https://www.linkedin.com/in/{vanity}/",
-                   [("✅ I sent it", f"fu:{c['rowid']}")])
+        outbox.upsert_contact(c["key"], status="accepted", accepted_at=now())
+        outbox.add("li_msg", f"https://www.linkedin.com/in/{vanity}/", msg, expected_name=c["name"],
+                   contact_key=c["key"], header=f"💼 accepted · {escape(c['brand'] or '')} · role re-checked ✓")
 
 
 def nudges(dry: bool) -> None:
@@ -153,10 +141,9 @@ def nudges(dry: bool) -> None:
         if c["channel"] == "x":
             outbox.add("x_dm", c["url"].rstrip("/").split("/")[-1], msg, contact_key=c["key"],
                        header=f"🔁 nudge · no reply in {days} days")
-        else:
-            outbox.say(f"🔁 <b>{escape(c['name'])}</b> · no reply in {days} days. Paste if you like:\n\n"
-                       f"<code>{escape(msg)}</code>\n\n{c['url']}",
-                       [("✅ I sent it", f"ndg:{c['rowid']}"), ("💬 they replied", f"rep:{c['rowid']}")])
+        else:                                        # sends only if the chat still ends with our message
+            outbox.add("li_nudge", c["url"], msg, expected_name=c["name"], contact_key=c["key"],
+                       header=f"🔁 nudge · no reply in {days} days")
         con.execute("update contacts set nudged_at=? where rowid=?", (now(), c["rowid"]))
 
 

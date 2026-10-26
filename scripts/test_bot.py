@@ -63,4 +63,26 @@ for i in range(bot.DAILY_CAP["li_connect"]):
 bot.random.randint = lambda a, b: 0
 bot.work(con)
 assert "d" not in sent, "cap must hold"
+
+# 7. a sent LinkedIn follow-up / nudge moves the contact forward, never back
+def contact_row(oid, kind, key):
+    outbox.upsert_contact(key, channel="linkedin", status="accepted")
+    con.execute("insert into outbox (id, kind, target, text, status, decided, contact_key) values (?,?,?,?,?,?,?)",
+                (oid, kind, "t", "Hi X, hi", "queued", old, key))
+con.execute("delete from outbox where kind='li_connect'")
+contact_row("m", "li_msg", "li:m")
+bot.work(con)
+c = con.execute("select status, followup_sent_at from contacts where key='li:m'").fetchone()
+assert c["status"] == "followup_sent" and c["followup_sent_at"], dict(c)
+contact_row("n", "li_nudge", "li:n")
+bot.work(con)
+c = con.execute("select status, nudged_at from contacts where key='li:n'").fetchone()
+assert c["status"] == "accepted" and c["nudged_at"], dict(c)
+
+# 8. follow-up template: right greeting, raise only when known, agency wording for agencies
+import li_watch
+li_watch.raise_info = lambda b: "raised $1M Seed on 2026-09-01 (Inc42)" if b == "Acme" else "(no funding info)"
+assert li_watch.followup("Ana", "Acme", False).startswith("Hi Ana, thanks for connecting, and congrats on the Acme raise!")
+assert "congrats" not in li_watch.followup("Ana", "Zed", False)
+assert "for their brand clients" in li_watch.followup("Ana", "AgencyCo", True)
 print("ok")
