@@ -150,6 +150,15 @@ async def follow(url: str) -> dict:
         await post._close(page)
 
 
+def same_person(name: str, expect: str) -> bool:
+    """Exact match, or an abbreviated last name ("soundous M.") that LinkedIn spells out
+    once you're connected ("soundous moufakir"). The profile URL pins the person."""
+    a, b = name.lower().split(), expect.lower().split()
+    if a == b:
+        return True
+    return len(a) >= 2 and len(b) == 2 and a[0] == b[0] and b[1].endswith(".") and a[-1].startswith(b[1][:-1])
+
+
 async def message(url: str, text: str, check: bool, expect: str = "", allow_thread: bool = False) -> dict:
     """Message the person whose profile is open (works without connecting when their
     profile offers Message, e.g. Services pages). Refuses if the greeting's name differs."""
@@ -158,10 +167,10 @@ async def message(url: str, text: str, check: bool, expect: str = "", allow_thre
         await browser.settle_page(page, 7)
         await page.eval(FIND)
         name = json.loads(await page.eval(STATE))["name"].strip()
-        if expect and name.lower() != expect.lower():
+        if expect and not same_person(name, expect):
             return {"sent": False, "error": f"profile is {name!r}, expected {expect!r}; refusing"}
         first = name.split()[0] if name else ""
-        if not first or not text.startswith(f"Hi {first},"):
+        if not first or not text.lower().startswith(f"hi {first.lower()},"):
             return {"sent": False, "error": f"message doesn't greet {first or '?'}; refusing"}
         # the top card's Message link (no aria-label; sidebar ones carry other people's names).
         # Open its compose URL as a full page: the overlay chat doesn't render reliably.
